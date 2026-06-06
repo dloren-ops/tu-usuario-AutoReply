@@ -13,8 +13,8 @@ android {
         applicationId = "com.autoreply.bot"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
 
         // Repositorio de GitHub usado por el buscador de actualizaciones.
         buildConfigField("String", "GITHUB_OWNER", "\"dloren-ops\"")
@@ -26,9 +26,26 @@ android {
         }
     }
 
+    signingConfigs {
+        // Llave de firma FIJA compartida por todas las versiones. Esto evita el
+        // error "conflicto con un paquete existente" al actualizar, porque la
+        // firma del APK no cambia entre versiones.
+        create("shared") {
+            storeFile = file("autoreply-release.jks")
+            storePassword = "autoreply123"
+            keyAlias = "autoreply"
+            keyPassword = "autoreply123"
+        }
+    }
+
     buildTypes {
+        debug {
+            // El CI compila el APK de debug; lo firmamos con la llave fija.
+            signingConfig = signingConfigs.getByName("shared")
+        }
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("shared")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
