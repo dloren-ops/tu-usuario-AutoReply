@@ -31,7 +31,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.autoreply.bot.domain.model.ReplyFrequency
+import com.autoreply.bot.domain.model.ReplyScope
 import com.autoreply.bot.domain.model.Rule
+
+/** Texto corto que resume alcance y frecuencia de una regla. */
+private fun ruleScopeFrequencyLabel(rule: Rule): String {
+    val scope = when (rule.scope) {
+        ReplyScope.ALL -> "Todos"
+        ReplyScope.GROUPS_ONLY -> "Solo grupos"
+        ReplyScope.INDIVIDUAL_ONLY -> "Solo individuales"
+    }
+    val freq = when (rule.frequency) {
+        ReplyFrequency.ALWAYS -> "siempre"
+        ReplyFrequency.ONCE -> "una vez"
+        ReplyFrequency.EVERY_HOURS -> "cada ${rule.everyHours}h"
+    }
+    return "$scope - $freq"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -132,6 +149,11 @@ private fun RuleItem(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2
+                )
+                Text(
+                    text = ruleScopeFrequencyLabel(rule),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
             Switch(checked = rule.enabled, onCheckedChange = onToggle)

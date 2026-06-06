@@ -2,6 +2,7 @@ package com.autoreply.bot.domain
 
 import com.autoreply.bot.domain.model.AutoReplySettings
 import com.autoreply.bot.domain.model.MatchType
+import com.autoreply.bot.domain.model.ReplyScope
 import com.autoreply.bot.domain.model.Rule
 import java.util.Calendar
 
@@ -11,32 +12,50 @@ import java.util.Calendar
  */
 object ReplyEngine {
 
+    /** Resultado de evaluar un mensaje: que texto enviar y por que regla. */
+    data class Decision(
+        val text: String,
+        /** Regla que coincidio, o null si es el mensaje de ausencia global. */
+        val rule: Rule?
+    )
+
     /**
      * Decide la respuesta para un mensaje entrante.
      *
      * @param message texto recibido
      * @param rules reglas habilitadas, ya ordenadas por prioridad
      * @param settings ajustes actuales
-     * @return el texto a responder, o null si no se debe responder
+     * @param isGroup si la conversacion es un grupo
+     * @return la decision (texto + regla), o null si no se debe responder
      */
     fun decideReply(
         message: String,
         rules: List<Rule>,
-        settings: AutoReplySettings
-    ): String? {
+        settings: AutoReplySettings,
+        isGroup: Boolean
+    ): Decision? {
         val trimmed = message.trim()
         if (trimmed.isEmpty()) return null
 
-        // 1) Buscar la primera regla que coincida.
-        val matched = rules.firstOrNull { it.enabled && matches(trimmed, it) }
-        if (matched != null) return matched.response
+        // 1) Primera regla que coincida en texto Y en alcance (grupo/individual).
+        val matched = rules.firstOrNull {
+            it.enabled && scopeMatches(it.scope, isGroup) && matches(trimmed, it)
+        }
+        if (matched != null) return Decision(matched.response, matched)
 
-        // 2) Si ninguna regla coincide, usar el mensaje de ausencia (si esta activo).
+        // 2) Mensaje de ausencia global (si esta activo).
         if (settings.awayMessageEnabled && settings.awayMessage.isNotBlank()) {
-            return settings.awayMessage
+            return Decision(settings.awayMessage, null)
         }
 
         return null
+    }
+
+    /** Comprueba si el alcance de la regla aplica a este tipo de conversacion. */
+    fun scopeMatches(scope: ReplyScope, isGroup: Boolean): Boolean = when (scope) {
+        ReplyScope.ALL -> true
+        ReplyScope.GROUPS_ONLY -> isGroup
+        ReplyScope.INDIVIDUAL_ONLY -> !isGroup
     }
 
     /** Comprueba si un mensaje coincide con una regla, ignorando mayusculas. */

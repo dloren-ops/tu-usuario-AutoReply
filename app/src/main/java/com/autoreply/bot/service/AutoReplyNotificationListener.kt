@@ -11,6 +11,7 @@ import android.util.Log
 import com.autoreply.bot.AutoReplyApp
 import com.autoreply.bot.domain.ReplyEngine
 import com.autoreply.bot.domain.model.AutoReplySettings
+import com.autoreply.bot.domain.model.ReplyFrequency
 import com.autoreply.bot.domain.model.ReplyLog
 import com.autoreply.bot.domain.model.Rule
 import kotlinx.coroutines.CoroutineScope
@@ -37,8 +38,12 @@ class AutoReplyNotificationListener : NotificationListenerService() {
     @Volatile
     private var rules: List<Rule> = emptyList()
 
-    // Control anti-spam: ultima respuesta por (paquete + remitente).
+    // Control anti-spam global: ultima respuesta por (paquete + remitente).
     private val lastReplyAt = ConcurrentHashMap<String, Long>()
+
+    // Estado de frecuencia por regla+conversacion (clave -> ultima respuesta).
+    // Se precarga desde la BD al conectar para sobrevivir a reinicios.
+    private val freqState = ConcurrentHashMap<String, Long>()
 
     private val app: AutoReplyApp
         get() = application as AutoReplyApp
@@ -53,6 +58,13 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         app.container.ruleRepository.rules
             .onEach { rules = it }
             .launchIn(scope)
+
+        // Precargar el estado de frecuencia persistido.
+        scope.launch {
+            app.container.replyStateRepository.getAll().forEach {
+                freqState[it.key] = it.lastReplyAt
+            }
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -84,6 +96,8 @@ class AutoReplyNotificationListener : NotificationListenerService() {
 
         // Detectar conversacion de grupo.
         val isGroup = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
+        // Filtro global de grupos (ajuste general). Las reglas tienen ademas su
+        // propio alcance (todos/solo grupos/solo individuales).
         if (isGroup && !s.replyToGroups) return
 
         val sender = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
@@ -93,18 +107,43 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         // Buscar la accion de respuesta directa (RemoteInput).
         val replyAction = findReplyAction(notification) ?: return
 
-        // Anti-spam: respetar el cooldown por contacto.
-        val key = sbn.packageName + "|" + sender
         val now = System.currentTimeMillis()
-        val last = lastReplyAt[key]
-        if (last != null && now - last < s.cooldownSeconds * 1000L) return
 
-        val replyText = ReplyEngine.decideReply(message, rules, s) ?: return
+        // Anti-spam global: cooldown por contacto (independiente de la regla).
+        val contactKey = sbn.packageName + "|" + sender
+        val lastGlobal = lastReplyAt[contactKey]
+        if (lastGlobal != null && now - lastGlobal < s.cooldownSeconds * 1000L) return
 
-        val sent = sendReply(replyAction, replyText)
+        // Decidir respuesta segun reglas + alcance (grupo/individual).
+        val decision = ReplyEngine.decideReply(message, rules, s, isGroup) ?: return
+        val rule = decision.rule
+
+        // Aplicar la frecuencia POR REGLA y POR conversacion.
+        // Asi, aunque sigan llegando mensajes al mismo grupo/chat, solo se
+        // responde una vez (ONCE) o cada X horas (EVERY_HOURS).
+        val freqKey = if (rule != null) "rule:${rule.id}|$contactKey" else null
+        if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
+            val last = freqState[freqKey]
+            if (last != null) {
+                val allowed = when (rule.frequency) {
+                    ReplyFrequency.ONCE -> false
+                    ReplyFrequency.EVERY_HOURS -> now - last >= rule.everyHours * 3_600_000L
+                    ReplyFrequency.ALWAYS -> true
+                }
+                if (!allowed) return
+            }
+        }
+
+        val sent = sendReply(replyAction, decision.text)
         if (!sent) return
 
-        lastReplyAt[key] = now
+        lastReplyAt[contactKey] = now
+
+        // Persistir el estado de frecuencia por regla+conversacion.
+        if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
+            freqState[freqKey] = now
+            scope.launch { app.container.replyStateRepository.markReplied(freqKey, now) }
+        }
 
         // Registrar la respuesta enviada.
         val appLabel = loadAppLabel(sbn.packageName)
@@ -115,7 +154,7 @@ class AutoReplyNotificationListener : NotificationListenerService() {
                     appLabel = appLabel,
                     sender = sender,
                     incomingMessage = message,
-                    replyText = replyText,
+                    replyText = decision.text,
                     timestamp = now
                 )
             )
