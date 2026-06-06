@@ -87,6 +87,23 @@ A partir de ahí, cuando llegue un mensaje, AutoReply responderá según tus reg
 
 ---
 
+## 🔄 Actualizaciones automáticas (sin compilar tú)
+
+Este repo tiene **GitHub Actions** configurado. En cada cambio en `main`:
+
+1. Se compila el APK en la nube automáticamente.
+2. Se publica en **Releases** con la versión leída de `app/build.gradle.kts`.
+
+La app incluye un **buscador de actualizaciones** (pantalla *Inicio*):
+- Comprueba GitHub Releases al abrirse.
+- Si hay versión nueva, ofrece **descargar e instalar** con un toque.
+
+Para publicar una versión nueva basta con **subir el número de versión**
+(`versionCode` y `versionName`) en `app/build.gradle.kts` y hacer push a `main`.
+
+> La primera vez, en el teléfono debes permitir a AutoReply
+> "instalar apps desconocidas" (la app te llevará a ese ajuste).
+
 ## 🗺️ Ideas para el futuro
 
 - Variables en las respuestas (ej. nombre del contacto).
