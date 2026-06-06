@@ -7,9 +7,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -31,9 +35,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.autoreply.bot.ui.util.TimeFormat
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    onOpenAppSelection: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -45,6 +51,46 @@ fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // --- Apps a responder ---
+        Card(
+            onClick = onOpenAppSelection,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Apps,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Apps a responder",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        if (settings.restrictToApps) {
+                            "Solo ${settings.allowedPackages.size} app(s) seleccionada(s)"
+                        } else {
+                            "Respondiendo a todas las apps"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         // --- Mensaje de ausencia ---
         SettingCard(title = "Mensaje de ausencia") {
             ToggleRow(

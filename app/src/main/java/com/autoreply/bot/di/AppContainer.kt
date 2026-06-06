@@ -1,6 +1,7 @@
 package com.autoreply.bot.di
 
 import android.content.Context
+import com.autoreply.bot.apps.AppListRepository
 import com.autoreply.bot.data.local.AppDatabase
 import com.autoreply.bot.data.repository.LogRepository
 import com.autoreply.bot.data.repository.RuleRepository
@@ -18,4 +19,5 @@ class AppContainer(context: Context) {
     val logRepository: LogRepository = LogRepository(database.logDao())
     val settingsRepository: SettingsRepository = SettingsRepository(context)
     val updateRepository: UpdateRepository = UpdateRepository(context)
+    val appListRepository: AppListRepository = AppListRepository(context)
 }

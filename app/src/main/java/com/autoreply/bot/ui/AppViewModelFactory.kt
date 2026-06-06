@@ -3,6 +3,7 @@ package com.autoreply.bot.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.autoreply.bot.di.AppContainer
+import com.autoreply.bot.ui.apps.AppSelectionViewModel
 import com.autoreply.bot.ui.home.HomeViewModel
 import com.autoreply.bot.ui.logs.LogsViewModel
 import com.autoreply.bot.ui.rules.RulesViewModel
@@ -31,6 +32,9 @@ class AppViewModelFactory(private val container: AppContainer) : ViewModelProvid
 
             modelClass.isAssignableFrom(UpdateViewModel::class.java) ->
                 UpdateViewModel(container.updateRepository)
+
+            modelClass.isAssignableFrom(AppSelectionViewModel::class.java) ->
+                AppSelectionViewModel(container.appListRepository, container.settingsRepository)
 
             else -> throw IllegalArgumentException("ViewModel desconocido: ${modelClass.name}")
         } as T

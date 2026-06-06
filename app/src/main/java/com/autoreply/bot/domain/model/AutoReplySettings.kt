@@ -28,5 +28,13 @@ data class AutoReplySettings(
     val awayMessage: String = "Hola, en este momento no estoy disponible. Te respondere lo antes posible.",
 
     /** Paquetes de apps excluidos (no se responden). Vacio = responder a todas. */
-    val excludedPackages: Set<String> = emptySet()
+    val excludedPackages: Set<String> = emptySet(),
+
+    /**
+     * Si esta activo, SOLO se responde a las apps de [allowedPackages].
+     * Si esta desactivado, se responde a todas (salvo las excluidas).
+     */
+    val restrictToApps: Boolean = false,
+    /** Paquetes de apps a los que SI se responde cuando [restrictToApps] es true. */
+    val allowedPackages: Set<String> = emptySet()
 )

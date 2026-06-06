@@ -70,6 +70,9 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         val s = settings
         if (!s.masterEnabled) return
         if (sbn.packageName in s.excludedPackages) return
+        // Filtro por apps: si esta activo el modo restringido, solo respondemos
+        // a las apps que el usuario eligio explicitamente.
+        if (s.restrictToApps && sbn.packageName !in s.allowedPackages) return
         if (!ReplyEngine.isWithinSchedule(s, System.currentTimeMillis())) return
 
         val notification = sbn.notification ?: return

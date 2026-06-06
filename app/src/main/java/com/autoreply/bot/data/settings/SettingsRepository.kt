@@ -29,6 +29,8 @@ class SettingsRepository(private val context: Context) {
         val AWAY_ENABLED = booleanPreferencesKey("away_enabled")
         val AWAY_MESSAGE = stringPreferencesKey("away_message")
         val EXCLUDED_PACKAGES = stringSetPreferencesKey("excluded_packages")
+        val RESTRICT_TO_APPS = booleanPreferencesKey("restrict_to_apps")
+        val ALLOWED_PACKAGES = stringSetPreferencesKey("allowed_packages")
     }
 
     val settings: Flow<AutoReplySettings> = context.dataStore.data.map { prefs ->
@@ -44,7 +46,9 @@ class SettingsRepository(private val context: Context) {
             cooldownSeconds = prefs[Keys.COOLDOWN_SECONDS] ?: defaults.cooldownSeconds,
             awayMessageEnabled = prefs[Keys.AWAY_ENABLED] ?: defaults.awayMessageEnabled,
             awayMessage = prefs[Keys.AWAY_MESSAGE] ?: defaults.awayMessage,
-            excludedPackages = prefs[Keys.EXCLUDED_PACKAGES] ?: defaults.excludedPackages
+            excludedPackages = prefs[Keys.EXCLUDED_PACKAGES] ?: defaults.excludedPackages,
+            restrictToApps = prefs[Keys.RESTRICT_TO_APPS] ?: defaults.restrictToApps,
+            allowedPackages = prefs[Keys.ALLOWED_PACKAGES] ?: defaults.allowedPackages
         )
     }
 
@@ -71,6 +75,20 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setExcludedPackages(packages: Set<String>) = edit {
         it[Keys.EXCLUDED_PACKAGES] = packages
+    }
+
+    suspend fun setRestrictToApps(value: Boolean) = edit {
+        it[Keys.RESTRICT_TO_APPS] = value
+    }
+
+    suspend fun setAllowedPackages(packages: Set<String>) = edit {
+        it[Keys.ALLOWED_PACKAGES] = packages
+    }
+
+    suspend fun toggleAllowedPackage(pkg: String, allowed: Boolean) = edit { prefs ->
+        val current = (prefs[Keys.ALLOWED_PACKAGES] ?: emptySet()).toMutableSet()
+        if (allowed) current.add(pkg) else current.remove(pkg)
+        prefs[Keys.ALLOWED_PACKAGES] = current
     }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {

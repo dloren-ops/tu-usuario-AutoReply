@@ -38,6 +38,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.autoreply.bot.AutoReplyApp
 import com.autoreply.bot.service.NotificationAccess
+import com.autoreply.bot.ui.apps.AppSelectionScreen
+import com.autoreply.bot.ui.apps.AppSelectionViewModel
 import com.autoreply.bot.ui.home.HomeScreen
 import com.autoreply.bot.ui.home.HomeViewModel
 import com.autoreply.bot.ui.logs.LogsScreen
@@ -140,7 +142,17 @@ private fun AppRoot(factory: AppViewModelFactory) {
             }
             composable(Dest.SETTINGS.route) {
                 val vm: SettingsViewModel = viewModel(factory = factory)
-                SettingsScreen(viewModel = vm)
+                SettingsScreen(
+                    viewModel = vm,
+                    onOpenAppSelection = { navController.navigate("app_selection") }
+                )
+            }
+            composable("app_selection") {
+                val vm: AppSelectionViewModel = viewModel(factory = factory)
+                AppSelectionScreen(
+                    viewModel = vm,
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable(Dest.LOGS.route) {
                 val vm: LogsViewModel = viewModel(factory = factory)
