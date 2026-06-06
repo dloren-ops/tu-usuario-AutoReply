@@ -45,6 +45,11 @@ class AutoReplyNotificationListener : NotificationListenerService() {
     // Se precarga desde la BD al conectar para sobrevivir a reinicios.
     private val freqState = ConcurrentHashMap<String, Long>()
 
+    // De-duplicacion: evita responder 2 veces al MISMO mensaje cuando la app
+    // (tipico en grupos de WhatsApp) re-publica o actualiza la notificacion en
+    // milisegundos. Clave = paquete + clave de notificacion + contenido.
+    private val recentlyHandled = ConcurrentHashMap<String, Long>()
+
     private val app: AutoReplyApp
         get() = application as AutoReplyApp
 
@@ -104,10 +109,20 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         val message = extractMessage(extras)
         if (message.isBlank()) return
 
+        val now = System.currentTimeMillis()
+
+        // --- De-duplicacion del MISMO mensaje ---
+        // En grupos, la app suele re-publicar/actualizar la notificacion en
+        // milisegundos, disparando onNotificationPosted varias veces para el
+        // mismo mensaje. Si ya manejamos esta misma firma hace muy poco, salir.
+        val dedupKey = sbn.packageName + "|" + sbn.key + "|" + message
+        val lastSame = recentlyHandled[dedupKey]
+        if (lastSame != null && now - lastSame < DEDUP_WINDOW_MS) return
+        recentlyHandled[dedupKey] = now
+        pruneRecentlyHandled(now)
+
         // Buscar la accion de respuesta directa (RemoteInput).
         val replyAction = findReplyAction(notification) ?: return
-
-        val now = System.currentTimeMillis()
 
         // Anti-spam global: cooldown por contacto (independiente de la regla).
         val contactKey = sbn.packageName + "|" + sender
@@ -134,14 +149,23 @@ class AutoReplyNotificationListener : NotificationListenerService() {
             }
         }
 
-        val sent = sendReply(replyAction, decision.text)
-        if (!sent) return
-
+        // Reservar ANTES de enviar para cerrar la "carrera" entre dos
+        // notificaciones casi simultaneas (evita la doble respuesta).
         lastReplyAt[contactKey] = now
+        if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
+            freqState[freqKey] = now
+        }
+
+        val sent = sendReply(replyAction, decision.text)
+        if (!sent) {
+            // Si fallo el envio, revertir la reserva para permitir reintento.
+            if (lastGlobal != null) lastReplyAt[contactKey] = lastGlobal
+            else lastReplyAt.remove(contactKey)
+            return
+        }
 
         // Persistir el estado de frecuencia por regla+conversacion.
         if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
-            freqState[freqKey] = now
             scope.launch { app.container.replyStateRepository.markReplied(freqKey, now) }
         }
 
@@ -203,6 +227,16 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         pkg
     }
 
+    /** Elimina entradas viejas del mapa de de-duplicacion. */
+    private fun pruneRecentlyHandled(now: Long) {
+        if (recentlyHandled.size < 200) return
+        val iterator = recentlyHandled.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (now - entry.value > DEDUP_WINDOW_MS) iterator.remove()
+        }
+    }
+
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
     }
@@ -214,5 +248,8 @@ class AutoReplyNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "AutoReplyListener"
+
+        // Ventana para considerar dos notificaciones como "el mismo mensaje".
+        private const val DEDUP_WINDOW_MS = 8_000L
     }
 }
