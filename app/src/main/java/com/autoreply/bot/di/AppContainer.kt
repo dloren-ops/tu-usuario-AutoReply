@@ -1,0 +1,21 @@
+package com.autoreply.bot.di
+
+import android.content.Context
+import com.autoreply.bot.data.local.AppDatabase
+import com.autoreply.bot.data.repository.LogRepository
+import com.autoreply.bot.data.repository.RuleRepository
+import com.autoreply.bot.data.settings.SettingsRepository
+import com.autoreply.bot.update.UpdateRepository
+
+/**
+ * Inyeccion de dependencias manual y ligera (sin frameworks) para mantener
+ * la app rapida y con tiempos de compilacion bajos.
+ */
+class AppContainer(context: Context) {
+    private val database = AppDatabase.getInstance(context)
+
+    val ruleRepository: RuleRepository = RuleRepository(database.ruleDao())
+    val logRepository: LogRepository = LogRepository(database.logDao())
+    val settingsRepository: SettingsRepository = SettingsRepository(context)
+    val updateRepository: UpdateRepository = UpdateRepository(context)
+}
