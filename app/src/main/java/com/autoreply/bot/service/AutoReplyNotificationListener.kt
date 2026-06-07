@@ -164,24 +164,16 @@ class AutoReplyNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * Identificador estable de una conversacion. Combina los identificadores
-     * internos de la notificacion (tag + id), que la app reutiliza para el mismo
-     * chat y NO cambian entre re-publicaciones, mas el titulo "limpio" (sin el
-     * contador "(N mensajes)" que varia con cada mensaje).
+     * Identificador estable de una conversacion.
+     *
+     * Usa [StatusBarNotification.getKey], el identificador interno y UNICO que
+     * Android asigna a cada notificacion/chat. Es el mismo mientras la
+     * conversacion exista y NO cambia aunque el titulo muestre "(N mensajes)"
+     * ni cuando la app re-publica la notificacion. Asi distinguimos de forma
+     * fiable "este chat" de "otro chat" (cada grupo/persona tiene su propia key).
      */
     private fun conversationKey(sbn: StatusBarNotification, sender: String): String {
-        val tag = sbn.tag ?: ""
-        return sbn.packageName + "|" + tag + "|" + sbn.id + "|" + sanitizeTitle(sender)
-    }
-
-    /**
-     * Quita sufijos de contador del titulo, p. ej.:
-     *   "Familia (3 mensajes)" -> "Familia"
-     *   "Ana (2 messages)"     -> "Ana"
-     * Asi la clave de conversacion no cambia con cada mensaje nuevo.
-     */
-    private fun sanitizeTitle(title: String): String {
-        return title.replace(Regex("\\s*\\(\\d+[^)]*\\)\\s*$"), "").trim()
+        return sbn.packageName + "|" + sbn.key
     }
 
     /** Extrae el texto del mensaje de los distintos campos posibles. */

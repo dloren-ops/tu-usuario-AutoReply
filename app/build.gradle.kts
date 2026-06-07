@@ -13,8 +13,8 @@ android {
         applicationId = "com.autoreply.bot"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.8"
+        versionCode = 10
+        versionName = "1.9"
 
         // Repositorio de GitHub usado por el buscador de actualizaciones.
         buildConfigField("String", "GITHUB_OWNER", "\"dloren-ops\"")
