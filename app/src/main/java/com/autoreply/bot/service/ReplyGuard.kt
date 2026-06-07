@@ -12,27 +12,32 @@ import java.util.concurrent.ConcurrentHashMap
  * servicio vivas a la vez (tipico tras actualizar/reinstalar), y si cada una
  * tuviera su propio estado en memoria, ambas responderian -> mensajes duplicados.
  *
- * Todas las decisiones se toman en el hilo principal del servicio (las callbacks
- * de notificaciones son secuenciales), por lo que con estado compartido el
- * de-duplicado es fiable.
+ * El de-duplicado principal NO se basa en tiempo ni en texto, sino en la MARCA
+ * DE TIEMPO del mensaje entrante (timestamp). Cuando la app de mensajeria
+ * actualiza/re-publica la notificacion del mismo mensaje (por ejemplo al enviar
+ * nuestra respuesta, o si tarda en marcarse como enviada), el timestamp del
+ * mensaje entrante NO cambia. Por eso solo respondemos cuando llega un mensaje
+ * con timestamp ESTRICTAMENTE mayor al ultimo al que ya respondimos en ese chat.
  */
 object ReplyGuard {
 
-    /** Ultima vez que respondimos a una CONVERSACION (independiente del texto). */
-    private val lastReplyByConversation = ConcurrentHashMap<String, Long>()
+    /** Timestamp del ultimo mensaje entrante al que YA respondimos, por conversacion. */
+    private val lastRepliedStamp = ConcurrentHashMap<String, Long>()
 
-    /** Ultima vez que respondimos a un CONTACTO (para el cooldown del usuario). */
+    /** Momento (reloj) de la ultima respuesta, por conversacion (respaldo anti-rafaga). */
+    private val lastReplyTime = ConcurrentHashMap<String, Long>()
+
+    /** Momento de la ultima respuesta, por contacto (cooldown configurable). */
     private val lastReplyByContact = ConcurrentHashMap<String, Long>()
 
     /** Estado de frecuencia por regla+conversacion. */
     private val freqState = ConcurrentHashMap<String, Long>()
 
     /**
-     * Ventana dura minima entre respuestas a la MISMA conversacion. Mata los
-     * duplicados que llegan con milisegundos de diferencia, sin importar el
-     * cooldown configurado por el usuario.
+     * Ventana dura minima entre respuestas a la MISMA conversacion. Solo se usa
+     * como respaldo cuando no hay timestamp de mensaje disponible.
      */
-    private const val HARD_DEDUP_WINDOW_MS = 6_000L
+    private const val HARD_DEDUP_WINDOW_MS = 10_000L
 
     /** Precarga el estado de frecuencia persistido (al conectar el servicio). */
     fun preloadFrequency(entries: Map<String, Long>) {
@@ -40,25 +45,33 @@ object ReplyGuard {
     }
 
     /**
-     * Decide si se debe responder AHORA y, si si, reserva el turno de inmediato
-     * (antes de enviar) para que una segunda notificacion casi simultanea -o
-     * una segunda instancia del servicio- no vuelva a responder.
+     * Decide si se debe responder AHORA y, si si, reserva el turno de inmediato.
      *
+     * @param messageStamp marca de tiempo del mensaje entrante (0 si se desconoce)
      * @return true si se autoriza responder (y ya quedo reservado).
      */
     @Synchronized
     fun tryReserve(
         conversationKey: String,
         contactKey: String,
+        messageStamp: Long,
         rule: Rule?,
         cooldownMillis: Long,
         now: Long
     ): Boolean {
-        // 1) De-duplicado duro por conversacion (mata duplicados ms-apart).
-        val lastConv = lastReplyByConversation[conversationKey]
-        if (lastConv != null && now - lastConv < HARD_DEDUP_WINDOW_MS) return false
+        // 1) De-duplicado por IDENTIDAD del mensaje (lo principal).
+        // Solo respondemos a un mensaje entrante mas nuevo que el ultimo
+        // respondido. Re-publicaciones del mismo mensaje tienen el mismo stamp.
+        if (messageStamp > 0L) {
+            val lastStamp = lastRepliedStamp[conversationKey]
+            if (lastStamp != null && messageStamp <= lastStamp) return false
+        } else {
+            // Respaldo: si no hay stamp, usar ventana de tiempo dura.
+            val lastConv = lastReplyTime[conversationKey]
+            if (lastConv != null && now - lastConv < HARD_DEDUP_WINDOW_MS) return false
+        }
 
-        // 2) Cooldown configurable por contacto.
+        // 2) Cooldown configurable por contacto (anti-spam del usuario).
         val lastContact = lastReplyByContact[contactKey]
         if (lastContact != null && now - lastContact < cooldownMillis) return false
 
@@ -77,7 +90,8 @@ object ReplyGuard {
         }
 
         // Reservar el turno YA (antes de enviar).
-        lastReplyByConversation[conversationKey] = now
+        if (messageStamp > 0L) lastRepliedStamp[conversationKey] = messageStamp
+        lastReplyTime[conversationKey] = now
         lastReplyByContact[contactKey] = now
         if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
             freqState[freqKey] = now
@@ -87,10 +101,14 @@ object ReplyGuard {
         return true
     }
 
-    /** Revierte la reserva si el envio fallo (para permitir reintento). */
+    /**
+     * Revierte la reserva si el envio fallo (para permitir reintento).
+     * Nota: no revertimos [lastRepliedStamp] a proposito; si el envio fallo por
+     * red, no queremos spamear reintentos del mismo mensaje.
+     */
     @Synchronized
     fun rollback(conversationKey: String, contactKey: String, rule: Rule?) {
-        lastReplyByConversation.remove(conversationKey)
+        lastReplyTime.remove(conversationKey)
         lastReplyByContact.remove(contactKey)
         val freqKey = freqKey(rule, conversationKey)
         if (freqKey != null) freqState.remove(freqKey)
@@ -100,11 +118,16 @@ object ReplyGuard {
         if (rule != null) "rule:${rule.id}|$conversationKey" else null
 
     private fun pruneIfNeeded(now: Long) {
-        if (lastReplyByConversation.size > 300) {
-            lastReplyByConversation.entries.removeAll { now - it.value > 60_000L }
+        if (lastReplyTime.size > 300) {
+            lastReplyTime.entries.removeAll { now - it.value > 3_600_000L }
         }
         if (lastReplyByContact.size > 300) {
             lastReplyByContact.entries.removeAll { now - it.value > 3_600_000L }
+        }
+        if (lastRepliedStamp.size > 500) {
+            // Conserva solo las 250 conversaciones mas recientes por reloj.
+            val cutoff = lastReplyTime.values.sortedDescending().getOrNull(250) ?: return
+            lastRepliedStamp.keys.retainAll { (lastReplyTime[it] ?: 0L) >= cutoff }
         }
     }
 }

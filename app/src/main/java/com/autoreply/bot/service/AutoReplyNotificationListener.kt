@@ -108,9 +108,12 @@ class AutoReplyNotificationListener : NotificationListenerService() {
 
         val now = System.currentTimeMillis()
 
+        // Marca de tiempo del mensaje entrante. Es la "identidad" del mensaje:
+        // no cambia aunque la notificacion se actualice/re-publique (que es lo
+        // que causaba los duplicados al enviar nuestra respuesta).
+        val messageStamp = extractMessageTimestamp(extras, sbn)
+
         // Clave de CONVERSACION estable e independiente del texto del mensaje.
-        // Usamos identificadores que no cambian entre las re-publicaciones que
-        // hace la app para el mismo mensaje (lo que causaba el duplicado).
         val conversationKey = conversationKey(sbn, sender)
         val contactKey = sbn.packageName + "|" + sender
 
@@ -123,6 +126,7 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         val reserved = ReplyGuard.tryReserve(
             conversationKey = conversationKey,
             contactKey = contactKey,
+            messageStamp = messageStamp,
             rule = rule,
             cooldownMillis = s.cooldownSeconds * 1000L,
             now = now
@@ -175,6 +179,34 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
         if (!lines.isNullOrEmpty()) return lines.last().toString()
         return ""
+    }
+
+    /**
+     * Marca de tiempo del ultimo mensaje entrante. Es estable: identifica al
+     * mensaje y NO cambia cuando la app re-publica la notificacion.
+     *
+     * Preferimos el timestamp del ultimo mensaje de MessagingStyle (lo mas
+     * fiable). Si no esta disponible, usamos when del notification, y por ultimo
+     * el postTime de la notificacion.
+     */
+    private fun extractMessageTimestamp(extras: Bundle, sbn: StatusBarNotification): Long {
+        // MessagingStyle: lista de mensajes con su timestamp real.
+        @Suppress("DEPRECATION")
+        val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+        if (messages != null && messages.isNotEmpty()) {
+            var maxStamp = 0L
+            for (item in messages) {
+                val bundle = item as? Bundle ?: continue
+                val time = bundle.getLong("time", 0L)
+                if (time > maxStamp) maxStamp = time
+            }
+            if (maxStamp > 0L) return maxStamp
+        }
+        // "when" de la notificacion (suele ser la hora del mensaje).
+        val whenTime = sbn.notification.`when`
+        if (whenTime > 0L) return whenTime
+        // Ultimo recurso: hora en que se publico la notificacion.
+        return sbn.postTime
     }
 
     /** Localiza la primera accion que tenga una entrada de texto (RemoteInput). */
