@@ -5,26 +5,29 @@ import com.autoreply.bot.domain.model.Rule
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Guarda de respuestas a nivel de PROCESO (estatico).
+ * Guarda de respuestas a nivel de PROCESO (estatico), compartida por todas las
+ * instancias del NotificationListenerService.
  *
- * Es un singleton para que el estado se comparta entre TODAS las instancias
- * del NotificationListenerService. Android a veces mantiene dos instancias del
- * servicio vivas a la vez (tipico tras actualizar/reinstalar), y si cada una
- * tuviera su propio estado en memoria, ambas responderian -> mensajes duplicados.
+ * DE-DUPLICADO POR HUELLA DEL MENSAJE
+ * -----------------------------------
+ * El problema de los duplicados venia de que, cuando WhatsApp ENVIA finalmente
+ * nuestra respuesta (a veces con retraso por la red), ACTUALIZA/re-publica la
+ * notificacion del chat. Eso re-dispara onNotificationPosted con el MISMO
+ * mensaje entrante, y respondiamos de nuevo.
  *
- * El de-duplicado principal NO se basa en tiempo ni en texto, sino en la MARCA
- * DE TIEMPO del mensaje entrante (timestamp). Cuando la app de mensajeria
- * actualiza/re-publica la notificacion del mismo mensaje (por ejemplo al enviar
- * nuestra respuesta, o si tarda en marcarse como enviada), el timestamp del
- * mensaje entrante NO cambia. Por eso solo respondemos cuando llega un mensaje
- * con timestamp ESTRICTAMENTE mayor al ultimo al que ya respondimos en ese chat.
+ * Solucion: guardamos una "huella" del ultimo mensaje al que YA respondimos en
+ * cada conversacion (texto + hora del mensaje). Si llega otra notificacion con
+ * la MISMA huella (re-publicacion del mismo mensaje), NO respondemos. Solo
+ * respondemos cuando la huella cambia (mensaje realmente nuevo).
+ *
+ * Esto no depende de cuanto tarde en enviarse la respuesta.
  */
 object ReplyGuard {
 
-    /** Timestamp del ultimo mensaje entrante al que YA respondimos, por conversacion. */
-    private val lastRepliedStamp = ConcurrentHashMap<String, Long>()
+    /** Huella del ultimo mensaje respondido, por conversacion. */
+    private val lastRepliedSignature = ConcurrentHashMap<String, String>()
 
-    /** Momento (reloj) de la ultima respuesta, por conversacion (respaldo anti-rafaga). */
+    /** Momento de la ultima respuesta, por conversacion (ventana dura de respaldo). */
     private val lastReplyTime = ConcurrentHashMap<String, Long>()
 
     /** Momento de la ultima respuesta, por contacto (cooldown configurable). */
@@ -34,8 +37,8 @@ object ReplyGuard {
     private val freqState = ConcurrentHashMap<String, Long>()
 
     /**
-     * Ventana dura minima entre respuestas a la MISMA conversacion. Solo se usa
-     * como respaldo cuando no hay timestamp de mensaje disponible.
+     * Ventana dura minima entre respuestas a la MISMA conversacion. Atrapa
+     * cualquier doble disparo aunque la huella fallara por algun motivo.
      */
     private const val HARD_DEDUP_WINDOW_MS = 10_000L
 
@@ -47,35 +50,33 @@ object ReplyGuard {
     /**
      * Decide si se debe responder AHORA y, si si, reserva el turno de inmediato.
      *
-     * @param messageStamp marca de tiempo del mensaje entrante (0 si se desconoce)
+     * @param signature huella estable del mensaje entrante (texto + hora)
      * @return true si se autoriza responder (y ya quedo reservado).
      */
     @Synchronized
     fun tryReserve(
         conversationKey: String,
         contactKey: String,
-        messageStamp: Long,
+        signature: String,
         rule: Rule?,
         cooldownMillis: Long,
         now: Long
     ): Boolean {
-        // 1) De-duplicado por IDENTIDAD del mensaje (lo principal).
-        // Solo respondemos a un mensaje entrante mas nuevo que el ultimo
-        // respondido. Re-publicaciones del mismo mensaje tienen el mismo stamp.
-        if (messageStamp > 0L) {
-            val lastStamp = lastRepliedStamp[conversationKey]
-            if (lastStamp != null && messageStamp <= lastStamp) return false
-        } else {
-            // Respaldo: si no hay stamp, usar ventana de tiempo dura.
-            val lastConv = lastReplyTime[conversationKey]
-            if (lastConv != null && now - lastConv < HARD_DEDUP_WINDOW_MS) return false
-        }
+        // 1) De-duplicado por HUELLA: si ya respondimos a este mismo mensaje
+        // (misma huella) en esta conversacion, no repetir. Esto mata el
+        // duplicado por re-publicacion al enviarse nuestra respuesta.
+        if (lastRepliedSignature[conversationKey] == signature) return false
 
-        // 2) Cooldown configurable por contacto (anti-spam del usuario).
+        // 2) Ventana dura por conversacion: ademas, nunca respondemos dos veces
+        // a la misma conversacion en menos de HARD_DEDUP_WINDOW_MS (respaldo).
+        val lastConv = lastReplyTime[conversationKey]
+        if (lastConv != null && now - lastConv < HARD_DEDUP_WINDOW_MS) return false
+
+        // 3) Cooldown configurable por contacto (anti-spam del usuario).
         val lastContact = lastReplyByContact[contactKey]
         if (lastContact != null && now - lastContact < cooldownMillis) return false
 
-        // 3) Frecuencia por regla (una vez / cada X horas) por conversacion.
+        // 4) Frecuencia por regla (una vez / cada X horas) por conversacion.
         val freqKey = freqKey(rule, conversationKey)
         if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
             val last = freqState[freqKey]
@@ -90,7 +91,7 @@ object ReplyGuard {
         }
 
         // Reservar el turno YA (antes de enviar).
-        if (messageStamp > 0L) lastRepliedStamp[conversationKey] = messageStamp
+        lastRepliedSignature[conversationKey] = signature
         lastReplyTime[conversationKey] = now
         lastReplyByContact[contactKey] = now
         if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
@@ -102,9 +103,8 @@ object ReplyGuard {
     }
 
     /**
-     * Revierte la reserva si el envio fallo (para permitir reintento).
-     * Nota: no revertimos [lastRepliedStamp] a proposito; si el envio fallo por
-     * red, no queremos spamear reintentos del mismo mensaje.
+     * Revierte la reserva si el envio fallo. No revertimos la huella a proposito:
+     * si fallo por red, no queremos spamear reintentos del mismo mensaje.
      */
     @Synchronized
     fun rollback(conversationKey: String, contactKey: String, rule: Rule?) {
@@ -124,10 +124,9 @@ object ReplyGuard {
         if (lastReplyByContact.size > 300) {
             lastReplyByContact.entries.removeAll { now - it.value > 3_600_000L }
         }
-        if (lastRepliedStamp.size > 500) {
-            // Conserva solo las 250 conversaciones mas recientes por reloj.
+        if (lastRepliedSignature.size > 500) {
             val cutoff = lastReplyTime.values.sortedDescending().getOrNull(250) ?: return
-            lastRepliedStamp.keys.retainAll { (lastReplyTime[it] ?: 0L) >= cutoff }
+            lastRepliedSignature.keys.retainAll { (lastReplyTime[it] ?: 0L) >= cutoff }
         }
     }
 }

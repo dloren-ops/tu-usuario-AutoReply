@@ -108,14 +108,16 @@ class AutoReplyNotificationListener : NotificationListenerService() {
 
         val now = System.currentTimeMillis()
 
-        // Marca de tiempo del mensaje entrante. Es la "identidad" del mensaje:
-        // no cambia aunque la notificacion se actualice/re-publique (que es lo
-        // que causaba los duplicados al enviar nuestra respuesta).
-        val messageStamp = extractMessageTimestamp(extras, sbn)
-
         // Clave de CONVERSACION estable e independiente del texto del mensaje.
         val conversationKey = conversationKey(sbn, sender)
         val contactKey = sbn.packageName + "|" + sender
+
+        // HUELLA del mensaje entrante = texto + hora real del mensaje. Es estable:
+        // si WhatsApp re-publica la notificacion (p. ej. al enviarse nuestra
+        // respuesta), el ultimo mensaje entrante sigue siendo el mismo y la huella
+        // no cambia -> no respondemos de nuevo. Solo cambia con un mensaje nuevo.
+        val messageStamp = extractMessageTimestamp(extras, sbn)
+        val signature = message + "|" + messageStamp
 
         // Decidir respuesta segun reglas + alcance (grupo/individual).
         val decision = ReplyEngine.decideReply(message, rules, s, isGroup) ?: return
@@ -126,7 +128,7 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         val reserved = ReplyGuard.tryReserve(
             conversationKey = conversationKey,
             contactKey = contactKey,
-            messageStamp = messageStamp,
+            signature = signature,
             rule = rule,
             cooldownMillis = s.cooldownSeconds * 1000L,
             now = now
@@ -162,14 +164,24 @@ class AutoReplyNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * Identificador estable de una conversacion, independiente del contenido del
-     * mensaje. Combina paquete + tag + id de notificacion + remitente. La app de
-     * mensajeria reutiliza estos valores para la misma conversacion, asi que dos
-     * callbacks del mismo mensaje generan la misma clave.
+     * Identificador estable de una conversacion. Combina los identificadores
+     * internos de la notificacion (tag + id), que la app reutiliza para el mismo
+     * chat y NO cambian entre re-publicaciones, mas el titulo "limpio" (sin el
+     * contador "(N mensajes)" que varia con cada mensaje).
      */
     private fun conversationKey(sbn: StatusBarNotification, sender: String): String {
         val tag = sbn.tag ?: ""
-        return sbn.packageName + "|" + tag + "|" + sbn.id + "|" + sender
+        return sbn.packageName + "|" + tag + "|" + sbn.id + "|" + sanitizeTitle(sender)
+    }
+
+    /**
+     * Quita sufijos de contador del titulo, p. ej.:
+     *   "Familia (3 mensajes)" -> "Familia"
+     *   "Ana (2 messages)"     -> "Ana"
+     * Asi la clave de conversacion no cambia con cada mensaje nuevo.
+     */
+    private fun sanitizeTitle(title: String): String {
+        return title.replace(Regex("\\s*\\(\\d+[^)]*\\)\\s*$"), "").trim()
     }
 
     /** Extrae el texto del mensaje de los distintos campos posibles. */
