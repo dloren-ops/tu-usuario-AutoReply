@@ -21,11 +21,15 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Servicio que escucha las notificaciones de otras apps y responde
  * automaticamente usando la accion de respuesta directa (RemoteInput).
+ *
+ * IMPORTANTE: el estado anti-duplicado vive en [ReplyGuard] (singleton estatico)
+ * y NO en campos de esta clase. Android puede tener mas de una instancia de este
+ * servicio viva a la vez (sobre todo tras actualizar la app); si el estado fuera
+ * por-instancia, ambas responderian y se enviarian mensajes duplicados.
  */
 class AutoReplyNotificationListener : NotificationListenerService() {
 
@@ -37,18 +41,6 @@ class AutoReplyNotificationListener : NotificationListenerService() {
 
     @Volatile
     private var rules: List<Rule> = emptyList()
-
-    // Control anti-spam global: ultima respuesta por (paquete + remitente).
-    private val lastReplyAt = ConcurrentHashMap<String, Long>()
-
-    // Estado de frecuencia por regla+conversacion (clave -> ultima respuesta).
-    // Se precarga desde la BD al conectar para sobrevivir a reinicios.
-    private val freqState = ConcurrentHashMap<String, Long>()
-
-    // De-duplicacion: evita responder 2 veces al MISMO mensaje cuando la app
-    // (tipico en grupos de WhatsApp) re-publica o actualiza la notificacion en
-    // milisegundos. Clave = paquete + clave de notificacion + contenido.
-    private val recentlyHandled = ConcurrentHashMap<String, Long>()
 
     private val app: AutoReplyApp
         get() = application as AutoReplyApp
@@ -64,11 +56,11 @@ class AutoReplyNotificationListener : NotificationListenerService() {
             .onEach { rules = it }
             .launchIn(scope)
 
-        // Precargar el estado de frecuencia persistido.
+        // Precargar el estado de frecuencia persistido en el guard estatico.
         scope.launch {
-            app.container.replyStateRepository.getAll().forEach {
-                freqState[it.key] = it.lastReplyAt
-            }
+            val map = app.container.replyStateRepository.getAll()
+                .associate { it.key to it.lastReplyAt }
+            ReplyGuard.preloadFrequency(map)
         }
     }
 
@@ -94,7 +86,9 @@ class AutoReplyNotificationListener : NotificationListenerService() {
 
         val notification = sbn.notification ?: return
 
-        // Saltar resumenes de grupo y notificaciones persistentes del sistema.
+        // Saltar resumenes de grupo: en grupos, WhatsApp publica una notificacion
+        // "resumen" ademas de la del mensaje. Si respondieramos a ambas saldria
+        // duplicado. Solo procesamos la notificacion concreta del mensaje.
         if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
 
         val extras = notification.extras ?: return
@@ -109,62 +103,40 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         val message = extractMessage(extras)
         if (message.isBlank()) return
 
-        val now = System.currentTimeMillis()
-
-        // --- De-duplicacion del MISMO mensaje ---
-        // En grupos, la app suele re-publicar/actualizar la notificacion en
-        // milisegundos, disparando onNotificationPosted varias veces para el
-        // mismo mensaje. Si ya manejamos esta misma firma hace muy poco, salir.
-        val dedupKey = sbn.packageName + "|" + sbn.key + "|" + message
-        val lastSame = recentlyHandled[dedupKey]
-        if (lastSame != null && now - lastSame < DEDUP_WINDOW_MS) return
-        recentlyHandled[dedupKey] = now
-        pruneRecentlyHandled(now)
-
-        // Buscar la accion de respuesta directa (RemoteInput).
+        // Solo respondemos a notificaciones que admiten respuesta directa.
         val replyAction = findReplyAction(notification) ?: return
 
-        // Anti-spam global: cooldown por contacto (independiente de la regla).
+        val now = System.currentTimeMillis()
+
+        // Clave de CONVERSACION estable e independiente del texto del mensaje.
+        // Usamos identificadores que no cambian entre las re-publicaciones que
+        // hace la app para el mismo mensaje (lo que causaba el duplicado).
+        val conversationKey = conversationKey(sbn, sender)
         val contactKey = sbn.packageName + "|" + sender
-        val lastGlobal = lastReplyAt[contactKey]
-        if (lastGlobal != null && now - lastGlobal < s.cooldownSeconds * 1000L) return
 
         // Decidir respuesta segun reglas + alcance (grupo/individual).
         val decision = ReplyEngine.decideReply(message, rules, s, isGroup) ?: return
         val rule = decision.rule
 
-        // Aplicar la frecuencia POR REGLA y POR conversacion.
-        // Asi, aunque sigan llegando mensajes al mismo grupo/chat, solo se
-        // responde una vez (ONCE) o cada X horas (EVERY_HOURS).
-        val freqKey = if (rule != null) "rule:${rule.id}|$contactKey" else null
-        if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
-            val last = freqState[freqKey]
-            if (last != null) {
-                val allowed = when (rule.frequency) {
-                    ReplyFrequency.ONCE -> false
-                    ReplyFrequency.EVERY_HOURS -> now - last >= rule.everyHours * 3_600_000L
-                    ReplyFrequency.ALWAYS -> true
-                }
-                if (!allowed) return
-            }
-        }
-
-        // Reservar ANTES de enviar para cerrar la "carrera" entre dos
-        // notificaciones casi simultaneas (evita la doble respuesta).
-        lastReplyAt[contactKey] = now
-        if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
-            freqState[freqKey] = now
-        }
+        // Reservar el turno de forma atomica y compartida entre instancias.
+        // Si no se autoriza (duplicado, cooldown o frecuencia), salimos.
+        val reserved = ReplyGuard.tryReserve(
+            conversationKey = conversationKey,
+            contactKey = contactKey,
+            rule = rule,
+            cooldownMillis = s.cooldownSeconds * 1000L,
+            now = now
+        )
+        if (!reserved) return
 
         val sent = sendReply(replyAction, decision.text)
         if (!sent) {
-            // Si fallo el envio, revertir la reserva para permitir reintento.
-            if (lastGlobal != null) lastReplyAt[contactKey] = lastGlobal
-            else lastReplyAt.remove(contactKey)
+            ReplyGuard.rollback(conversationKey, contactKey, rule)
             return
         }
 
         // Persistir el estado de frecuencia por regla+conversacion.
+        val freqKey = ReplyGuard.freqKey(rule, conversationKey)
         if (rule != null && rule.frequency != ReplyFrequency.ALWAYS && freqKey != null) {
             scope.launch { app.container.replyStateRepository.markReplied(freqKey, now) }
         }
@@ -183,6 +155,17 @@ class AutoReplyNotificationListener : NotificationListenerService() {
                 )
             )
         }
+    }
+
+    /**
+     * Identificador estable de una conversacion, independiente del contenido del
+     * mensaje. Combina paquete + tag + id de notificacion + remitente. La app de
+     * mensajeria reutiliza estos valores para la misma conversacion, asi que dos
+     * callbacks del mismo mensaje generan la misma clave.
+     */
+    private fun conversationKey(sbn: StatusBarNotification, sender: String): String {
+        val tag = sbn.tag ?: ""
+        return sbn.packageName + "|" + tag + "|" + sbn.id + "|" + sender
     }
 
     /** Extrae el texto del mensaje de los distintos campos posibles. */
@@ -227,16 +210,6 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         pkg
     }
 
-    /** Elimina entradas viejas del mapa de de-duplicacion. */
-    private fun pruneRecentlyHandled(now: Long) {
-        if (recentlyHandled.size < 200) return
-        val iterator = recentlyHandled.entries.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            if (now - entry.value > DEDUP_WINDOW_MS) iterator.remove()
-        }
-    }
-
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
     }
@@ -248,8 +221,5 @@ class AutoReplyNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "AutoReplyListener"
-
-        // Ventana para considerar dos notificaciones como "el mismo mensaje".
-        private const val DEDUP_WINDOW_MS = 8_000L
     }
 }
