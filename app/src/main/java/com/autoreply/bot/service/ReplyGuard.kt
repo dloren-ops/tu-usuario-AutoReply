@@ -48,17 +48,19 @@ object ReplyGuard {
     }
 
     /**
-     * Reinicia el estado en memoria de una regla (frecuencia + huellas) para que
-     * vuelva a responder desde cero. Se llama al reactivar una regla.
+     * Reinicia SOLO el estado de frecuencia de una regla (los contadores de
+     * "una vez" / "cada X horas") para que vuelva a responder tras reactivarla.
+     *
+     * IMPORTANTE: NO tocamos el anti-duplicados (lastRepliedSignature /
+     * lastReplyTime). Esa memoria es la que evita responder 2 veces al MISMO
+     * mensaje; si la borraramos, volverian los duplicados. Como esa proteccion
+     * solo bloquea el mensaje identico mas reciente, no impide responder a
+     * mensajes nuevos tras el reinicio.
      */
     @Synchronized
     fun resetRule(ruleId: Long) {
         val prefix = "rule:$ruleId|"
         freqState.keys.removeAll { it.startsWith(prefix) }
-        // Tambien limpiamos huellas y tiempos para que el proximo mensaje, aunque
-        // sea identico al ultimo, se considere "nuevo" y se responda.
-        lastRepliedSignature.clear()
-        lastReplyTime.clear()
     }
 
     /**
