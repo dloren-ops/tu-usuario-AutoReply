@@ -140,10 +140,22 @@ private fun RuleItem(
                     .weight(1f)
                     .padding(end = 8.dp)
             ) {
-                Text(
-                    text = rule.keyword.ifBlank { "(cualquier mensaje)" },
-                    style = MaterialTheme.typography.titleMedium
-                )
+                if (rule.title.isNotBlank()) {
+                    Text(
+                        text = rule.title,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "Palabra: ${rule.keyword.ifBlank { "(cualquier mensaje)" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = rule.keyword.ifBlank { "(cualquier mensaje)" },
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
                 Text(
                     text = "${rule.matchType.label}  ->  ${rule.response}",
                     style = MaterialTheme.typography.bodySmall,

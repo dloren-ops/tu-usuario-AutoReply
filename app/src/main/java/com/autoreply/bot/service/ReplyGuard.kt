@@ -48,6 +48,20 @@ object ReplyGuard {
     }
 
     /**
+     * Reinicia el estado en memoria de una regla (frecuencia + huellas) para que
+     * vuelva a responder desde cero. Se llama al reactivar una regla.
+     */
+    @Synchronized
+    fun resetRule(ruleId: Long) {
+        val prefix = "rule:$ruleId|"
+        freqState.keys.removeAll { it.startsWith(prefix) }
+        // Tambien limpiamos huellas y tiempos para que el proximo mensaje, aunque
+        // sea identico al ultimo, se considere "nuevo" y se responda.
+        lastRepliedSignature.clear()
+        lastReplyTime.clear()
+    }
+
+    /**
      * Decide si se debe responder AHORA y, si si, reserva el turno de inmediato.
      *
      * @param signature huella estable del mensaje entrante (texto + hora)

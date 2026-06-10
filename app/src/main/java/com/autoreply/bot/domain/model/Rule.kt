@@ -6,6 +6,8 @@ package com.autoreply.bot.domain.model
  */
 data class Rule(
     val id: Long = 0,
+    /** Nombre/titulo para identificar la regla facilmente (opcional). */
+    val title: String = "",
     val keyword: String,
     val response: String,
     val matchType: MatchType = MatchType.CONTAINS,

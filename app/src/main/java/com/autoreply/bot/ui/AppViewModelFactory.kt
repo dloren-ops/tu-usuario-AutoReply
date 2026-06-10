@@ -22,7 +22,7 @@ class AppViewModelFactory(private val container: AppContainer) : ViewModelProvid
                 HomeViewModel(container.settingsRepository, container.logRepository)
 
             modelClass.isAssignableFrom(RulesViewModel::class.java) ->
-                RulesViewModel(container.ruleRepository)
+                RulesViewModel(container.ruleRepository, container.replyStateRepository)
 
             modelClass.isAssignableFrom(SettingsViewModel::class.java) ->
                 SettingsViewModel(container.settingsRepository)

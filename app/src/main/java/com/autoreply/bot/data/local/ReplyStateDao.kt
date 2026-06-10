@@ -19,4 +19,8 @@ interface ReplyStateDao {
 
     @Query("DELETE FROM reply_state")
     suspend fun clear()
+
+    /** Borra el estado de frecuencia de una regla concreta (claves "rule:<id>|..."). */
+    @Query("DELETE FROM reply_state WHERE `key` LIKE :prefix || '%'")
+    suspend fun clearForRulePrefix(prefix: String)
 }

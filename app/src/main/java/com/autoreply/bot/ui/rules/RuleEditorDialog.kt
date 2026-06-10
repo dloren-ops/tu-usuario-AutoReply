@@ -36,6 +36,7 @@ fun RuleEditorDialog(
 ) {
     var keyword by remember { mutableStateOf(initial?.keyword ?: "") }
     var response by remember { mutableStateOf(initial?.response ?: "") }
+    var title by remember { mutableStateOf(initial?.title ?: "") }
     var matchType by remember { mutableStateOf(initial?.matchType ?: MatchType.CONTAINS) }
     var scope by remember { mutableStateOf(initial?.scope ?: ReplyScope.ALL) }
     var frequency by remember { mutableStateOf(initial?.frequency ?: ReplyFrequency.ALWAYS) }
@@ -55,6 +56,14 @@ fun RuleEditorDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Nombre de la regla (opcional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Text("Tipo de coincidencia")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MatchType.entries.forEach { type ->
@@ -131,6 +140,7 @@ fun RuleEditorDialog(
                 enabled = isValid,
                 onClick = {
                     val rule = (initial ?: Rule(keyword = "", response = "")).copy(
+                        title = title.trim(),
                         keyword = if (matchType == MatchType.ANY) "" else keyword.trim(),
                         response = response.trim(),
                         matchType = matchType,

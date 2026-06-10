@@ -10,6 +10,7 @@ import com.autoreply.bot.domain.model.Rule
 @Entity(tableName = "rules")
 data class RuleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String = "",
     val keyword: String,
     val response: String,
     val matchType: String,
@@ -23,6 +24,7 @@ data class RuleEntity(
 
 fun RuleEntity.toDomain(): Rule = Rule(
     id = id,
+    title = title,
     keyword = keyword,
     response = response,
     matchType = runCatching { MatchType.valueOf(matchType) }.getOrDefault(MatchType.CONTAINS),
@@ -36,6 +38,7 @@ fun RuleEntity.toDomain(): Rule = Rule(
 
 fun Rule.toEntity(): RuleEntity = RuleEntity(
     id = id,
+    title = title,
     keyword = keyword,
     response = response,
     matchType = matchType.name,

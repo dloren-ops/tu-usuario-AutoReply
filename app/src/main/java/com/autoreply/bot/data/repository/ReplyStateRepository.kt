@@ -17,4 +17,9 @@ class ReplyStateRepository(private val dao: ReplyStateDao) {
     }
 
     suspend fun clear() = dao.clear()
+
+    /** Reinicia el estado de una regla para que vuelva a responder desde cero. */
+    suspend fun resetForRule(ruleId: Long) {
+        dao.clearForRulePrefix("rule:$ruleId|")
+    }
 }
