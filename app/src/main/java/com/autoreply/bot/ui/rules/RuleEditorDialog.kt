@@ -4,12 +4,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -18,10 +23,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
+import com.autoreply.bot.domain.model.KnownGroup
 import com.autoreply.bot.domain.model.MatchType
 import com.autoreply.bot.domain.model.ReplyFrequency
 import com.autoreply.bot.domain.model.ReplyScope
@@ -31,6 +38,7 @@ import com.autoreply.bot.domain.model.Rule
 @Composable
 fun RuleEditorDialog(
     initial: Rule?,
+    knownGroups: List<KnownGroup>,
     onDismiss: () -> Unit,
     onSave: (Rule) -> Unit
 ) {
@@ -41,12 +49,18 @@ fun RuleEditorDialog(
     var scope by remember { mutableStateOf(initial?.scope ?: ReplyScope.ALL) }
     var frequency by remember { mutableStateOf(initial?.frequency ?: ReplyFrequency.ALWAYS) }
     var everyHours by remember { mutableStateOf((initial?.everyHours ?: 24).toString()) }
+    var selectedGroupIds by remember { mutableStateOf(initial?.allowedGroupIds ?: emptySet()) }
 
     val hoursValid = frequency != ReplyFrequency.EVERY_HOURS ||
         (everyHours.toIntOrNull()?.let { it in 1..720 } == true)
     val isValid = response.isNotBlank() &&
         (matchType == MatchType.ANY || keyword.isNotBlank()) &&
         hoursValid
+
+    // Determine if groups come from multiple apps (to show packageName hint)
+    val multipleApps = remember(knownGroups) {
+        knownGroups.map { it.packageName }.distinct().size > 1
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -98,9 +112,85 @@ fun RuleEditorDialog(
                     ReplyScope.entries.forEach { sc ->
                         FilterChip(
                             selected = scope == sc,
-                            onClick = { scope = sc },
+                            onClick = {
+                                scope = sc
+                                // Clear group selection when switching to INDIVIDUAL_ONLY
+                                if (sc == ReplyScope.INDIVIDUAL_ONLY) {
+                                    selectedGroupIds = emptySet()
+                                }
+                            },
                             label = { Text(sc.label) }
                         )
+                    }
+                }
+
+                // --- Group selection section (visible for ALL or GROUPS_ONLY) ---
+                if (scope == ReplyScope.ALL || scope == ReplyScope.GROUPS_ONLY) {
+                    Text(
+                        text = "Grupos permitidos",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "(vacio = todos los grupos)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (knownGroups.isEmpty()) {
+                        Text(
+                            text = "Aun no se han detectado grupos. Abre un chat de grupo para que aparezca aqui.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            knownGroups.forEach { group ->
+                                val isChecked = selectedGroupIds.contains(group.id)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = isChecked,
+                                        onCheckedChange = { checked ->
+                                            selectedGroupIds = if (checked) {
+                                                selectedGroupIds + group.id
+                                            } else {
+                                                selectedGroupIds - group.id
+                                            }
+                                        }
+                                    )
+                                    Column(modifier = Modifier.padding(start = 4.dp)) {
+                                        Text(
+                                            text = group.groupName,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        if (group.communityParent != null) {
+                                            Text(
+                                                text = "Comunidad: ${group.communityParent}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (multipleApps) {
+                                            Text(
+                                                text = group.packageName,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -146,7 +236,8 @@ fun RuleEditorDialog(
                         matchType = matchType,
                         scope = scope,
                         frequency = frequency,
-                        everyHours = everyHours.toIntOrNull()?.coerceIn(1, 720) ?: 24
+                        everyHours = everyHours.toIntOrNull()?.coerceIn(1, 720) ?: 24,
+                        allowedGroupIds = if (scope == ReplyScope.INDIVIDUAL_ONLY) emptySet() else selectedGroupIds
                     )
                     onSave(rule)
                 }

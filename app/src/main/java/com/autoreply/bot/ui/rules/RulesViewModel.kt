@@ -2,8 +2,10 @@ package com.autoreply.bot.ui.rules
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.autoreply.bot.data.repository.KnownGroupRepository
 import com.autoreply.bot.data.repository.ReplyStateRepository
 import com.autoreply.bot.data.repository.RuleRepository
+import com.autoreply.bot.domain.model.KnownGroup
 import com.autoreply.bot.domain.model.Rule
 import com.autoreply.bot.service.ReplyGuard
 import kotlinx.coroutines.flow.SharingStarted
@@ -13,10 +15,17 @@ import kotlinx.coroutines.launch
 
 class RulesViewModel(
     private val ruleRepository: RuleRepository,
-    private val replyStateRepository: ReplyStateRepository
+    private val replyStateRepository: ReplyStateRepository,
+    private val knownGroupRepository: KnownGroupRepository
 ) : ViewModel() {
 
     val rules: StateFlow<List<Rule>> = ruleRepository.rules.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptyList()
+    )
+
+    val knownGroups: StateFlow<List<KnownGroup>> = knownGroupRepository.groups.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList()
