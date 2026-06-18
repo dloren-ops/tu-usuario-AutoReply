@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.autoreply.bot.domain.model.KnownGroup
 import com.autoreply.bot.domain.model.ReplyFrequency
 import com.autoreply.bot.domain.model.ReplyScope
 import com.autoreply.bot.domain.model.Rule
@@ -57,6 +58,7 @@ fun RulesScreen(
     modifier: Modifier = Modifier
 ) {
     val rules by viewModel.rules.collectAsStateWithLifecycle()
+    val knownGroups by viewModel.knownGroups.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<Rule?>(null) }
     var showEditor by remember { mutableStateOf(false) }
 
@@ -111,6 +113,7 @@ fun RulesScreen(
     if (showEditor) {
         RuleEditorDialog(
             initial = editing,
+            knownGroups = knownGroups,
             onDismiss = { showEditor = false },
             onSave = {
                 viewModel.save(it)

@@ -1,0 +1,30 @@
+{
+  "project_type": "Android Kotlin app with Jetpack Compose, Room, DataStore, manual DI",
+  "language": "Kotlin",
+  "build_system": "Gradle (Kotlin DSL) with version catalog (libs.versions.toml). Uses KSP for Room annotation processing.",
+  "test_framework": "No unit tests present in codebase. AndroidJUnitRunner configured for instrumentation tests but none exist.",
+  "build_command": "./gradlew assembleDebug",
+  "test_command": "No tests to run - project has no test files",
+  "verification_instructions": "Run ./gradlew assembleDebug to verify the project compiles. No unit/instrumentation tests exist to run.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "Project uses Gradle wrapper. Run ./gradlew assembleDebug from the project root.",
+  "environment_constraints": "Android project - requires Android SDK 35. No emulator/device available for runtime testing. Validation is compile-only via assembleDebug.",
+  "contribution_requirements": "No CONTRIBUTING.md. Key constraint from user: DO NOT modify ReplyGuard.kt, DO NOT change conversationKey generation, DO NOT change dedup logic.",
+  "key_patterns": "Manual DI via AppContainer. Room entities have toDomain()/toEntity() extension functions. ViewModels created via AppViewModelFactory. Compose UI with AlertDialog for editors. FilterChip for enum selections. Database migrations are explicit Migration objects added to Room builder. Notification listener caches settings/rules in volatile fields updated via Flow.",
+  "relevant_files": [
+    "app/src/main/java/com/autoreply/bot/domain/model/Rule.kt",
+    "app/src/main/java/com/autoreply/bot/domain/ReplyEngine.kt",
+    "app/src/main/java/com/autoreply/bot/data/local/AppDatabase.kt",
+    "app/src/main/java/com/autoreply/bot/data/local/RuleEntity.kt",
+    "app/src/main/java/com/autoreply/bot/data/local/RuleDao.kt",
+    "app/src/main/java/com/autoreply/bot/data/repository/RuleRepository.kt",
+    "app/src/main/java/com/autoreply/bot/di/AppContainer.kt",
+    "app/src/main/java/com/autoreply/bot/service/AutoReplyNotificationListener.kt",
+    "app/src/main/java/com/autoreply/bot/ui/rules/RuleEditorDialog.kt",
+    "app/src/main/java/com/autoreply/bot/ui/rules/RulesViewModel.kt",
+    "app/src/main/java/com/autoreply/bot/ui/rules/RulesScreen.kt",
+    "app/src/main/java/com/autoreply/bot/ui/AppViewModelFactory.kt",
+    "app/src/main/java/com/autoreply/bot/service/ReplyGuard.kt"
+  ],
+  "directory_structure": "app/src/main/java/com/autoreply/bot/ - domain/ (models + ReplyEngine), data/local/ (Room entities + DAOs + AppDatabase), data/repository/ (repositories), data/settings/ (DataStore), service/ (NotificationListener + ReplyGuard), ui/ (Compose screens + ViewModels), di/ (AppContainer), apps/ (app list for filtering)"
+}

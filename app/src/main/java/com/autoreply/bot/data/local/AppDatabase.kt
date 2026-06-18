@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [RuleEntity::class, LogEntity::class, ReplyStateEntity::class],
-    version = 4,
+    entities = [RuleEntity::class, LogEntity::class, ReplyStateEntity::class, KnownGroupEntity::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -17,6 +17,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun ruleDao(): RuleDao
     abstract fun logDao(): LogDao
     abstract fun replyStateDao(): ReplyStateDao
+    abstract fun knownGroupDao(): KnownGroupDao
 
     companion object {
         @Volatile
@@ -49,6 +50,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migracion v4 -> v5: tabla de grupos conocidos + campo allowedGroupIds en rules.
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS known_groups (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "packageName TEXT NOT NULL, " +
+                        "groupName TEXT NOT NULL, " +
+                        "conversationKey TEXT NOT NULL, " +
+                        "lastSeenAt INTEGER NOT NULL, " +
+                        "communityParent TEXT)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_known_groups_conversationKey " +
+                        "ON known_groups (conversationKey)"
+                )
+                db.execSQL("ALTER TABLE rules ADD COLUMN allowedGroupIds TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -56,7 +77,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "autoreply.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build().also { INSTANCE = it }
             }
         }

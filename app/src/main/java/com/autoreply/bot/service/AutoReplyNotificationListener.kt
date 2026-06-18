@@ -9,8 +9,10 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.autoreply.bot.AutoReplyApp
+import com.autoreply.bot.data.repository.KnownGroupRepository
 import com.autoreply.bot.domain.ReplyEngine
 import com.autoreply.bot.domain.model.AutoReplySettings
+import com.autoreply.bot.domain.model.KnownGroup
 import com.autoreply.bot.domain.model.ReplyFrequency
 import com.autoreply.bot.domain.model.ReplyLog
 import com.autoreply.bot.domain.model.Rule
@@ -21,6 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Servicio que escucha las notificaciones de otras apps y responde
@@ -112,6 +115,29 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         val conversationKey = conversationKey(sbn, sender)
         val contactKey = sbn.packageName + "|" + sender
 
+        // Auto-descubrimiento de grupos: registrar el grupo en la BD local y
+        // obtener su ID para el filtrado de reglas. Ambas operaciones se ejecutan
+        // en un unico bloque runBlocking para evitar la race condition donde el
+        // upsert (fire-and-forget) no ha completado cuando se intenta leer el ID.
+        // Estamos en el binder thread del sistema (off-main), y el upsert de Room
+        // es sub-millisecond, asi que el bloqueo es despreciable.
+        var groupId: Long? = null
+        if (isGroup) {
+            val communityParent = extras.getCharSequence("android.subText")?.toString()?.trim()
+            groupId = runBlocking {
+                app.container.knownGroupRepository.upsert(
+                    KnownGroup(
+                        packageName = sbn.packageName,
+                        groupName = sender,
+                        conversationKey = conversationKey,
+                        lastSeenAt = now,
+                        communityParent = communityParent?.ifBlank { null }
+                    )
+                )
+                app.container.knownGroupRepository.getByConversationKey(conversationKey)?.id
+            }
+        }
+
         // HUELLA del mensaje entrante = texto + hora real del mensaje. Es estable:
         // si WhatsApp re-publica la notificacion (p. ej. al enviarse nuestra
         // respuesta), el ultimo mensaje entrante sigue siendo el mismo y la huella
@@ -119,8 +145,8 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         val messageStamp = extractMessageTimestamp(extras, sbn)
         val signature = message + "|" + messageStamp
 
-        // Decidir respuesta segun reglas + alcance (grupo/individual).
-        val decision = ReplyEngine.decideReply(message, rules, s, isGroup) ?: return
+        // Decidir respuesta segun reglas + alcance (grupo/individual) + filtro de grupo.
+        val decision = ReplyEngine.decideReply(message, rules, s, isGroup, groupId) ?: return
         val rule = decision.rule
 
         // Reservar el turno de forma atomica y compartida entre instancias.

@@ -3,6 +3,7 @@ package com.autoreply.bot.di
 import android.content.Context
 import com.autoreply.bot.apps.AppListRepository
 import com.autoreply.bot.data.local.AppDatabase
+import com.autoreply.bot.data.repository.KnownGroupRepository
 import com.autoreply.bot.data.repository.LogRepository
 import com.autoreply.bot.data.repository.ReplyStateRepository
 import com.autoreply.bot.data.repository.RuleRepository
@@ -19,6 +20,7 @@ class AppContainer(context: Context) {
     val ruleRepository: RuleRepository = RuleRepository(database.ruleDao())
     val logRepository: LogRepository = LogRepository(database.logDao())
     val replyStateRepository: ReplyStateRepository = ReplyStateRepository(database.replyStateDao())
+    val knownGroupRepository: KnownGroupRepository = KnownGroupRepository(database.knownGroupDao())
     val settingsRepository: SettingsRepository = SettingsRepository(context)
     val updateRepository: UpdateRepository = UpdateRepository(context)
     val appListRepository: AppListRepository = AppListRepository(context)
