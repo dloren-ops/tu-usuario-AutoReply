@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add KnownGroup domain model, Room entity/DAO/repository, database migration v4->v5, and wire into AppContainer. Also add allowedGroupIds field to Rule model and RuleEntity with proper mapping.",
+  "status": "in_progress",
+  "steps": [
+    "Create domain model file app/src/main/java/com/autoreply/bot/domain/model/KnownGroup.kt with data class KnownGroup(id: Long = 0, packageName: String, groupName: String, conversationKey: String, lastSeenAt: Long, communityParent: String? = null)",
+    "Create Room entity file app/src/main/java/com/autoreply/bot/data/local/KnownGroupEntity.kt with @Entity(tableName = 'known_groups') and toDomain()/toEntity() extension functions. Fields: id (PrimaryKey autoGenerate), packageName, groupName, conversationKey (unique), lastSeenAt, communityParent (nullable)",
+    "Create DAO file app/src/main/java/com/autoreply/bot/data/local/KnownGroupDao.kt with: @Upsert upsert(entity), @Query observeAll(): Flow<List<KnownGroupEntity>>, @Query getByConversationKey(key: String): KnownGroupEntity?, @Query deleteOlderThan(cutoff: Long)",
+    "Create repository file app/src/main/java/com/autoreply/bot/data/repository/KnownGroupRepository.kt wrapping KnownGroupDao, exposing: groups: Flow<List<KnownGroup>>, suspend upsert(group: KnownGroup), suspend getByConversationKey(key: String): KnownGroup?, suspend pruneOld(maxAgeMillis: Long)",
+    "Modify app/src/main/java/com/autoreply/bot/domain/model/Rule.kt: add field allowedGroupIds: Set<Long> = emptySet() to the data class",
+    "Modify app/src/main/java/com/autoreply/bot/data/local/RuleEntity.kt: add column allowedGroupIds: String = '' to entity class. Update toDomain() to parse comma-separated longs into Set<Long> (empty string -> emptySet). Update toEntity() to join Set<Long> with commas (emptySet -> empty string).",
+    "Modify app/src/main/java/com/autoreply/bot/data/local/AppDatabase.kt: add KnownGroupEntity to entities array, add abstract fun knownGroupDao(): KnownGroupDao, bump version to 5, add MIGRATION_4_5 that: (1) CREATE TABLE known_groups with columns id INTEGER PRIMARY KEY AUTOINCREMENT, packageName TEXT NOT NULL, groupName TEXT NOT NULL, conversationKey TEXT NOT NULL UNIQUE, lastSeenAt INTEGER NOT NULL, communityParent TEXT; (2) ALTER TABLE rules ADD COLUMN allowedGroupIds TEXT NOT NULL DEFAULT ''. Add MIGRATION_4_5 to the .addMigrations() call.",
+    "Modify app/src/main/java/com/autoreply/bot/di/AppContainer.kt: add val knownGroupRepository: KnownGroupRepository = KnownGroupRepository(database.knownGroupDao())"
+  ],
+  "acceptance_criteria": [
+    "Project compiles successfully with ./gradlew assembleDebug",
+    "KnownGroup domain model exists with all specified fields",
+    "KnownGroupEntity Room entity exists with proper annotations and toDomain/toEntity mappings",
+    "KnownGroupDao has upsert, observeAll, getByConversationKey, and deleteOlderThan methods",
+    "KnownGroupRepository wraps DAO correctly",
+    "Rule.kt has allowedGroupIds: Set<Long> = emptySet()",
+    "RuleEntity has allowedGroupIds: String column with proper conversion in toDomain/toEntity",
+    "AppDatabase is version 5 with MIGRATION_4_5 creating known_groups table and adding allowedGroupIds column to rules",
+    "AppContainer exposes knownGroupRepository"
+  ],
+  "verification": [
+    "Run ./gradlew assembleDebug and confirm it succeeds with exit code 0"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

@@ -20,5 +20,7 @@ data class Rule(
     val frequency: ReplyFrequency = ReplyFrequency.ALWAYS,
     /** Horas de espera cuando [frequency] es EVERY_HOURS. */
     val everyHours: Int = 24,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** IDs de grupos permitidos. Si esta vacio, aplica a todos (comportamiento por defecto). */
+    val allowedGroupIds: Set<Long> = emptySet()
 )

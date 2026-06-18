@@ -19,7 +19,8 @@ data class RuleEntity(
     val scope: String = ReplyScope.ALL.name,
     val frequency: String = ReplyFrequency.ALWAYS.name,
     val everyHours: Int = 24,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val allowedGroupIds: String = ""
 )
 
 fun RuleEntity.toDomain(): Rule = Rule(
@@ -33,7 +34,9 @@ fun RuleEntity.toDomain(): Rule = Rule(
     scope = runCatching { ReplyScope.valueOf(scope) }.getOrDefault(ReplyScope.ALL),
     frequency = runCatching { ReplyFrequency.valueOf(frequency) }.getOrDefault(ReplyFrequency.ALWAYS),
     everyHours = everyHours,
-    createdAt = createdAt
+    createdAt = createdAt,
+    allowedGroupIds = if (allowedGroupIds.isBlank()) emptySet()
+        else allowedGroupIds.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
 )
 
 fun Rule.toEntity(): RuleEntity = RuleEntity(
@@ -47,5 +50,6 @@ fun Rule.toEntity(): RuleEntity = RuleEntity(
     scope = scope.name,
     frequency = frequency.name,
     everyHours = everyHours,
-    createdAt = createdAt
+    createdAt = createdAt,
+    allowedGroupIds = allowedGroupIds.joinToString(",")
 )

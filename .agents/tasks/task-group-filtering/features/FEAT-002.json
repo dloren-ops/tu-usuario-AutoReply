@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Integrate group auto-discovery into the notification listener and add group-filtering logic to ReplyEngine. When a group notification arrives, upsert it into KnownGroupRepository (fire-and-forget). Modify ReplyEngine.decideReply to accept a groupId parameter and filter rules by allowedGroupIds. DO NOT touch ReplyGuard.kt or change conversationKey generation or dedup logic.",
+  "status": "pending",
+  "steps": [
+    "Modify app/src/main/java/com/autoreply/bot/domain/ReplyEngine.kt: Add a new parameter groupId: Long? = null to decideReply(). In the rule matching logic (the firstOrNull lambda), add an additional check: if the rule's allowedGroupIds is not empty AND isGroup is true, then the groupId must be non-null and must be contained in rule.allowedGroupIds. If allowedGroupIds is empty, the rule applies to all (current behavior preserved). The signature becomes: fun decideReply(message: String, rules: List<Rule>, settings: AutoReplySettings, isGroup: Boolean, groupId: Long? = null): Decision?",
+    "Modify app/src/main/java/com/autoreply/bot/service/AutoReplyNotificationListener.kt: (1) Add a new @Volatile var knownGroupId: Long? = null field is NOT needed - instead compute it inline. (2) In onListenerConnected(), also store a reference to app.container.knownGroupRepository in a local val or use app.container directly. (3) In handleNotification(), AFTER detecting isGroup and BEFORE calling ReplyEngine.decideReply: if isGroup is true, extract the group name from extras (EXTRA_TITLE = sender already has the group name). Then do a fire-and-forget scope.launch to upsert the group into knownGroupRepository with packageName=sbn.packageName, groupName=sender, conversationKey=conversationKey (already computed), lastSeenAt=now. Also try to detect community parent from extras key 'android.subText' or similar WhatsApp extras. (4) To get the groupId for filtering: call knownGroupRepository.getByConversationKey(conversationKey) synchronously (suspend fun, we are already in a non-main thread context via the notification callback). Store the result's id as groupId. (5) Pass groupId to ReplyEngine.decideReply(). CRITICAL: Do NOT change how conversationKey is computed. Do NOT modify ReplyGuard interactions. Do NOT change signature/dedup logic. The upsert must be fire-and-forget (scope.launch) but the getByConversationKey lookup should be done to get the ID for filtering.",
+    "Handle the case where the group has never been seen before (first notification): Since upsert is fire-and-forget, the first time a group message arrives, getByConversationKey might return null (race condition). In that case, groupId will be null, and the filtering logic in ReplyEngine should treat null groupId as 'allow all rules' (same as empty allowedGroupIds). This ensures no messages are missed on first contact with a new group."
+  ],
+  "acceptance_criteria": [
+    "Project compiles successfully with ./gradlew assembleDebug",
+    "ReplyEngine.decideReply has a new optional groupId: Long? = null parameter",
+    "When allowedGroupIds is empty on a rule, behavior is identical to before (rule matches all groups/individuals based on scope)",
+    "When allowedGroupIds is non-empty and isGroup=true, only rules whose allowedGroupIds contains the groupId are considered",
+    "When groupId is null (group not yet in DB), all rules are considered (no filtering)",
+    "AutoReplyNotificationListener upserts group info on every group notification (fire-and-forget coroutine)",
+    "ReplyGuard.kt is completely unchanged",
+    "conversationKey() method is completely unchanged",
+    "The dedup/signature logic flow is completely unchanged"
+  ],
+  "verification": [
+    "Run ./gradlew assembleDebug and confirm it succeeds with exit code 0",
+    "Run grep -n 'ReplyGuard' on the listener file to confirm ReplyGuard interactions are unchanged",
+    "Verify ReplyGuard.kt has no modifications with git diff"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

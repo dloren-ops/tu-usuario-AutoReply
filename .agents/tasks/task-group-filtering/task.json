@@ -1,0 +1,7 @@
+{
+  "task_id": "task-group-filtering",
+  "task_description": "Add per-rule group filtering via auto-discovered groups from notifications. Users can select specific WhatsApp/messaging groups for each rule using checkboxes in the rule editor. Groups are auto-discovered from incoming notifications (no manual name typing needed). If no groups are selected, rule applies to all (preserving current behavior). ReplyGuard and dedup logic must not be touched.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Add group selection UI to the RuleEditorDialog. Show a section with checkboxes listing all known groups (from KnownGroupRepository) when the rule's scope is GROUPS_ONLY or ALL. Users can check/uncheck groups. If none are checked, the rule applies to all groups (current behavior). Modify RulesViewModel and RulesScreen to pass known groups data to the editor.",
+  "status": "pending",
+  "steps": [
+    "Modify app/src/main/java/com/autoreply/bot/ui/rules/RulesViewModel.kt: Add a dependency on KnownGroupRepository (constructor parameter). Add a StateFlow<List<KnownGroup>> property 'knownGroups' that collects from knownGroupRepository.groups with stateIn(). Import KnownGroup domain model.",
+    "Modify app/src/main/java/com/autoreply/bot/ui/AppViewModelFactory.kt: Update the RulesViewModel instantiation to pass container.knownGroupRepository as the third parameter.",
+    "Modify app/src/main/java/com/autoreply/bot/ui/rules/RuleEditorDialog.kt: (1) Add a parameter knownGroups: List<KnownGroup> to the RuleEditorDialog composable. (2) Add state: var selectedGroupIds by remember { mutableStateOf(initial?.allowedGroupIds ?: emptySet()) }. (3) After the 'Aplicar a' (scope) section, add a new section visible only when scope is GROUPS_ONLY or ALL: Title 'Grupos permitidos' with a subtitle '(vacio = todos los grupos)'. Show a scrollable Column/LazyColumn with each KnownGroup as a Row with Checkbox + group name + package name hint. Checking/unchecking toggles the group's ID in selectedGroupIds. (4) In the onSave lambda, include allowedGroupIds = if (scope == ReplyScope.INDIVIDUAL_ONLY) emptySet() else selectedGroupIds in the rule copy.",
+    "Modify app/src/main/java/com/autoreply/bot/ui/rules/RulesScreen.kt: (1) Collect knownGroups from the viewModel as state. (2) Pass the knownGroups list to RuleEditorDialog when showing it."
+  ],
+  "acceptance_criteria": [
+    "Project compiles successfully with ./gradlew assembleDebug",
+    "RulesViewModel exposes a knownGroups StateFlow<List<KnownGroup>>",
+    "AppViewModelFactory passes knownGroupRepository to RulesViewModel",
+    "RuleEditorDialog shows a group selection section when scope is ALL or GROUPS_ONLY",
+    "Group selection section shows checkboxes with group names from known groups",
+    "When scope is INDIVIDUAL_ONLY, allowedGroupIds is cleared to emptySet",
+    "When no groups are selected, the saved rule has allowedGroupIds = emptySet (applies to all)",
+    "Editing an existing rule with allowedGroupIds pre-selects those groups in the checkboxes"
+  ],
+  "verification": [
+    "Run ./gradlew assembleDebug and confirm it succeeds with exit code 0"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
