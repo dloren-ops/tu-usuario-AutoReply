@@ -26,20 +26,22 @@ object ReplyEngine {
      * @param rules reglas habilitadas, ya ordenadas por prioridad
      * @param settings ajustes actuales
      * @param isGroup si la conversacion es un grupo
+     * @param groupId ID del grupo en la base de datos local (null si no se conoce aun)
      * @return la decision (texto + regla), o null si no se debe responder
      */
     fun decideReply(
         message: String,
         rules: List<Rule>,
         settings: AutoReplySettings,
-        isGroup: Boolean
+        isGroup: Boolean,
+        groupId: Long? = null
     ): Decision? {
         val trimmed = message.trim()
         if (trimmed.isEmpty()) return null
 
-        // 1) Primera regla que coincida en texto Y en alcance (grupo/individual).
+        // 1) Primera regla que coincida en texto, alcance (grupo/individual) y filtro de grupo.
         val matched = rules.firstOrNull {
-            it.enabled && scopeMatches(it.scope, isGroup) && matches(trimmed, it)
+            it.enabled && scopeMatches(it.scope, isGroup) && groupAllowed(it, isGroup, groupId) && matches(trimmed, it)
         }
         if (matched != null) return Decision(matched.response, matched)
 
@@ -49,6 +51,19 @@ object ReplyEngine {
         }
 
         return null
+    }
+
+    /**
+     * Comprueba si el grupo esta permitido por la regla.
+     * - Si allowedGroupIds esta vacio, la regla aplica a todos (comportamiento actual).
+     * - Si no es grupo, no se filtra (el scope ya controla eso).
+     * - Si groupId es null (grupo no esta aun en la BD), se permite (no bloquear en primer contacto).
+     */
+    fun groupAllowed(rule: Rule, isGroup: Boolean, groupId: Long?): Boolean {
+        if (rule.allowedGroupIds.isEmpty()) return true
+        if (!isGroup) return true
+        if (groupId == null) return true
+        return groupId in rule.allowedGroupIds
     }
 
     /** Comprueba si el alcance de la regla aplica a este tipo de conversacion. */

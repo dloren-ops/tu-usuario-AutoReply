@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Add KnownGroup domain model, Room entity/DAO/repository, database migration v4->v5, and wire into AppContainer. Also add allowedGroupIds field to Rule model and RuleEntity with proper mapping.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create domain model file app/src/main/java/com/autoreply/bot/domain/model/KnownGroup.kt with data class KnownGroup(id: Long = 0, packageName: String, groupName: String, conversationKey: String, lastSeenAt: Long, communityParent: String? = null)",
     "Create Room entity file app/src/main/java/com/autoreply/bot/data/local/KnownGroupEntity.kt with @Entity(tableName = 'known_groups') and toDomain()/toEntity() extension functions. Fields: id (PrimaryKey autoGenerate), packageName, groupName, conversationKey (unique), lastSeenAt, communityParent (nullable)",
@@ -28,5 +28,5 @@
     "Run ./gradlew assembleDebug and confirm it succeeds with exit code 0"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Build requires JDK 17 (JAVA_HOME=/root/.local/share/mise/installs/java/17) and ANDROID_HOME=/opt/android-sdk. JDK 25 is incompatible with the Kotlin compiler used by the Gradle Kotlin DSL. Android SDK was installed to /opt/android-sdk with platforms;android-35 and build-tools;35.0.0. Build command: export ANDROID_HOME=/opt/android-sdk && export JAVA_HOME=/root/.local/share/mise/installs/java/17 && export PATH=$JAVA_HOME/bin:$PATH && ./gradlew assembleDebug"
 }
