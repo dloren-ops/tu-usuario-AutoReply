@@ -115,13 +115,16 @@ class AutoReplyNotificationListener : NotificationListenerService() {
         val conversationKey = conversationKey(sbn, sender)
         val contactKey = sbn.packageName + "|" + sender
 
-        // Auto-descubrimiento de grupos: registrar el grupo en la BD local.
-        // El upsert es fire-and-forget; la consulta del ID es sincrona (estamos
-        // fuera del hilo principal en el binder thread del sistema).
+        // Auto-descubrimiento de grupos: registrar el grupo en la BD local y
+        // obtener su ID para el filtrado de reglas. Ambas operaciones se ejecutan
+        // en un unico bloque runBlocking para evitar la race condition donde el
+        // upsert (fire-and-forget) no ha completado cuando se intenta leer el ID.
+        // Estamos en el binder thread del sistema (off-main), y el upsert de Room
+        // es sub-millisecond, asi que el bloqueo es despreciable.
         var groupId: Long? = null
         if (isGroup) {
             val communityParent = extras.getCharSequence("android.subText")?.toString()?.trim()
-            scope.launch {
+            groupId = runBlocking {
                 app.container.knownGroupRepository.upsert(
                     KnownGroup(
                         packageName = sbn.packageName,
@@ -131,9 +134,6 @@ class AutoReplyNotificationListener : NotificationListenerService() {
                         communityParent = communityParent?.ifBlank { null }
                     )
                 )
-            }
-            // Obtener el ID del grupo para filtrado de reglas.
-            groupId = runBlocking {
                 app.container.knownGroupRepository.getByConversationKey(conversationKey)?.id
             }
         }
