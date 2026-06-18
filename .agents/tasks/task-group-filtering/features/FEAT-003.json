@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Add group selection UI to the RuleEditorDialog. Show a section with checkboxes listing all known groups (from KnownGroupRepository) when the rule's scope is GROUPS_ONLY or ALL. Users can check/uncheck groups. If none are checked, the rule applies to all groups (current behavior). Modify RulesViewModel and RulesScreen to pass known groups data to the editor.",
-  "status": "pending",
+  "status": "completed",
   "steps": [
     "Modify app/src/main/java/com/autoreply/bot/ui/rules/RulesViewModel.kt: Add a dependency on KnownGroupRepository (constructor parameter). Add a StateFlow<List<KnownGroup>> property 'knownGroups' that collects from knownGroupRepository.groups with stateIn(). Import KnownGroup domain model.",
     "Modify app/src/main/java/com/autoreply/bot/ui/AppViewModelFactory.kt: Update the RulesViewModel instantiation to pass container.knownGroupRepository as the third parameter.",
@@ -23,5 +23,5 @@
     "Run ./gradlew assembleDebug and confirm it succeeds with exit code 0"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Build successful. All acceptance criteria met. The group selection UI integrates smoothly into the existing AlertDialog pattern. Used a nested scrollable Column for the group list to avoid the dialog becoming too tall."
 }
