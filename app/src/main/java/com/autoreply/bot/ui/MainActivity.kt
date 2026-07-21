@@ -42,6 +42,7 @@ import com.autoreply.bot.ui.apps.AppSelectionScreen
 import com.autoreply.bot.ui.apps.AppSelectionViewModel
 import com.autoreply.bot.ui.home.HomeScreen
 import com.autoreply.bot.ui.home.HomeViewModel
+import com.autoreply.bot.ui.license.LicenseViewModel
 import com.autoreply.bot.ui.logs.LogsScreen
 import com.autoreply.bot.ui.logs.LogsViewModel
 import com.autoreply.bot.ui.rules.RulesScreen
@@ -127,9 +128,11 @@ private fun AppRoot(factory: AppViewModelFactory) {
             composable(Dest.HOME.route) {
                 val vm: HomeViewModel = viewModel(factory = factory)
                 val updateVm: UpdateViewModel = viewModel(factory = factory)
+                val licenseVm: LicenseViewModel = viewModel(factory = factory)
                 HomeScreen(
                     viewModel = vm,
                     updateViewModel = updateVm,
+                    licenseViewModel = licenseVm,
                     permissionGranted = permissionGranted,
                     onOpenPermissionSettings = {
                         context.startActivity(NotificationAccess.settingsIntent())

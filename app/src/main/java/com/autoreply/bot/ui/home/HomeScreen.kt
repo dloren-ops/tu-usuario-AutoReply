@@ -36,6 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.autoreply.bot.domain.model.LicenseStatus
+import com.autoreply.bot.ui.license.LicenseSection
+import com.autoreply.bot.ui.license.LicenseViewModel
 import com.autoreply.bot.ui.update.UpdateSection
 import com.autoreply.bot.ui.update.UpdateViewModel
 
@@ -43,11 +46,14 @@ import com.autoreply.bot.ui.update.UpdateViewModel
 fun HomeScreen(
     viewModel: HomeViewModel,
     updateViewModel: UpdateViewModel,
+    licenseViewModel: LicenseViewModel,
     permissionGranted: Boolean,
     onOpenPermissionSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val licenseState by licenseViewModel.uiState.collectAsStateWithLifecycle()
+    val licenseActive = licenseState.status is LicenseStatus.Active
 
     Column(
         modifier = modifier
@@ -57,7 +63,7 @@ fun HomeScreen(
     ) {
         // Cabecera con degradado de marca.
         HeaderBanner(
-            enabled = state.settings.masterEnabled,
+            enabled = state.settings.masterEnabled && licenseActive,
             totalReplies = state.totalReplies
         )
 
@@ -67,6 +73,8 @@ fun HomeScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            LicenseSection(viewModel = licenseViewModel)
+
             PermissionCard(
                 granted = permissionGranted,
                 onOpenSettings = onOpenPermissionSettings
@@ -76,7 +84,7 @@ fun HomeScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (state.settings.masterEnabled) {
+                    containerColor = if (state.settings.masterEnabled && licenseActive) {
                         MaterialTheme.colorScheme.primaryContainer
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant
@@ -97,15 +105,19 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            if (state.settings.masterEnabled) "Activadas" else "Desactivadas",
+                            when {
+                                !licenseActive -> "Requiere licencia activa"
+                                state.settings.masterEnabled -> "Activadas"
+                                else -> "Desactivadas"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
-                        checked = state.settings.masterEnabled,
+                        checked = state.settings.masterEnabled && licenseActive,
                         onCheckedChange = { viewModel.setMasterEnabled(it) },
-                        enabled = permissionGranted,
+                        enabled = permissionGranted && licenseActive,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                             checkedTrackColor = MaterialTheme.colorScheme.primary

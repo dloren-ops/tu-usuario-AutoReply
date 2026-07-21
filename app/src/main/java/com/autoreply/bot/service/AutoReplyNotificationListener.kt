@@ -13,15 +13,20 @@ import com.autoreply.bot.data.repository.KnownGroupRepository
 import com.autoreply.bot.domain.ReplyEngine
 import com.autoreply.bot.domain.model.AutoReplySettings
 import com.autoreply.bot.domain.model.KnownGroup
+import com.autoreply.bot.domain.model.LicenseStatus
 import com.autoreply.bot.domain.model.ReplyFrequency
 import com.autoreply.bot.domain.model.ReplyLog
 import com.autoreply.bot.domain.model.Rule
+import com.autoreply.bot.license.LicenseManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -45,6 +50,12 @@ class AutoReplyNotificationListener : NotificationListenerService() {
     @Volatile
     private var rules: List<Rule> = emptyList()
 
+    // Licencia: sin ella, el servicio no responde. Se recalcula tambien de forma
+    // periodica (no solo al cambiar el registro) porque el vencimiento depende
+    // de la fecha actual, no de un evento.
+    @Volatile
+    private var licenseActive: Boolean = false
+
     private val app: AutoReplyApp
         get() = application as AutoReplyApp
 
@@ -65,6 +76,26 @@ class AutoReplyNotificationListener : NotificationListenerService() {
                 .associate { it.key to it.lastReplyAt }
             ReplyGuard.preloadFrequency(map)
         }
+
+        observeLicense()
+    }
+
+    private fun observeLicense() {
+        app.container.licenseRepository.record
+            .onEach { record ->
+                licenseActive = LicenseManager.computeStatus(applicationContext, record) is LicenseStatus.Active
+            }
+            .launchIn(scope)
+
+        // Reevalua el vencimiento aunque el registro no cambie (el tiempo si).
+        scope.launch {
+            while (isActive) {
+                LicenseManager.refreshLastSeen(app.container.licenseRepository)
+                val record = app.container.licenseRepository.record.first()
+                licenseActive = LicenseManager.computeStatus(applicationContext, record) is LicenseStatus.Active
+                delay(LICENSE_RECHECK_INTERVAL_MS)
+            }
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -78,6 +109,8 @@ class AutoReplyNotificationListener : NotificationListenerService() {
     private fun handleNotification(sbn: StatusBarNotification) {
         // Ignorar nuestras propias notificaciones para evitar bucles.
         if (sbn.packageName == packageName) return
+
+        if (!licenseActive) return
 
         val s = settings
         if (!s.masterEnabled) return
@@ -283,5 +316,6 @@ class AutoReplyNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "AutoReplyListener"
+        private const val LICENSE_RECHECK_INTERVAL_MS = 15 * 60 * 1000L
     }
 }

@@ -72,6 +72,54 @@ A partir de ahí, cuando llegue un mensaje, AutoReply responderá según tus reg
 
 ---
 
+## 🔑 Licencia / activación (para alquilar la app)
+
+AutoReply no funciona hasta que se activa con un **código** generado por vos
+(el dueño de la app). No hace falta servidor ni internet: el código lleva su
+propia firma y fecha de vencimiento, y queda **atado a ese teléfono**.
+
+### Flujo con el cliente
+
+1. El cliente instala la app y abre la pantalla **Inicio**. Ahí ve la tarjeta
+   **Licencia** con el **ID de este teléfono** (un código corto, con botón
+   para copiarlo).
+2. Te pasa ese ID (WhatsApp, lo que sea).
+3. Vos generás el código de activación en tu computadora:
+
+   ```bash
+   # Demo de 1 día
+   python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --demo
+
+   # Alquiler (30 días por mes)
+   python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --rental-months 1
+   python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --rental-months 3
+   ```
+
+4. Le mandás el código que imprime el script (algo como
+   `9P2KS-NAGSG-0HRDP-KRW2G`). Lo pega en el campo **Código de activación** y
+   toca **Activar**.
+5. Mientras la licencia esté vigente, la app funciona normalmente. Al vencer,
+   el interruptor maestro se bloquea y deja de responder hasta que cargue un
+   código nuevo (podés vender una renovación así, sin tocar el teléfono).
+
+### Cómo funciona por dentro
+
+- El código codifica: un hash corto del ID del teléfono, la fecha de
+  vencimiento y el tipo de plan (demo/alquiler), firmados con HMAC-SHA256.
+- La app verifica la firma con la misma clave y revisa que el hash del
+  teléfono coincida y que no haya vencido — todo local, sin red.
+- Un código generado para un teléfono **no sirve en otro** (el hash no
+  coincide) y no se puede alargar atrasando la fecha del sistema (la app
+  recuerda el último día visto).
+- La clave secreta vive en `LicenseSecret.kt` (app) y en
+  `tools/generate_license.py` (tu computadora) — **deben coincidir**. Guardá
+  ese script en un lugar privado: quien lo tenga puede generar códigos
+  válidos para cualquier teléfono. Si el código fuente de la app deja de ser
+  privado, generá una clave nueva (ver comentario en `LicenseSecret.kt`) y
+  recompilá.
+
+---
+
 ## ⚠️ Notas y limitaciones
 
 - Solo puede responder en apps cuya notificación incluye **respuesta directa**
