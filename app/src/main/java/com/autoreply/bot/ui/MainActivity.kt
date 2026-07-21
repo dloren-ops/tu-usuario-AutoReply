@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -37,6 +38,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.autoreply.bot.AutoReplyApp
+import com.autoreply.bot.BuildConfig
+import com.autoreply.bot.admin.AdminTools
 import com.autoreply.bot.service.NotificationAccess
 import com.autoreply.bot.ui.apps.AppSelectionScreen
 import com.autoreply.bot.ui.apps.AppSelectionViewModel
@@ -75,7 +78,8 @@ private enum class Dest(val route: String, val label: String, val icon: ImageVec
     HOME("home", "Inicio", Icons.Default.Home),
     RULES("rules", "Reglas", Icons.AutoMirrored.Filled.Chat),
     SETTINGS("settings", "Ajustes", Icons.Default.Settings),
-    LOGS("logs", "Registro", Icons.AutoMirrored.Filled.List)
+    LOGS("logs", "Registro", Icons.AutoMirrored.Filled.List),
+    ADMIN("admin", "Admin", Icons.Default.AdminPanelSettings)
 }
 
 @Composable
@@ -101,7 +105,8 @@ private fun AppRoot(factory: AppViewModelFactory) {
             val backStackEntry by navController.currentBackStackEntryAsState()
             val currentDestination = backStackEntry?.destination
             NavigationBar {
-                Dest.entries.forEach { dest ->
+                val visibleDests = Dest.entries.filter { it != Dest.ADMIN || BuildConfig.LICENSE_ADMIN_TOOLS }
+                visibleDests.forEach { dest ->
                     NavigationBarItem(
                         selected = currentDestination?.hierarchy?.any { it.route == dest.route } == true,
                         onClick = {
@@ -160,6 +165,11 @@ private fun AppRoot(factory: AppViewModelFactory) {
             composable(Dest.LOGS.route) {
                 val vm: LogsViewModel = viewModel(factory = factory)
                 LogsScreen(viewModel = vm)
+            }
+            if (BuildConfig.LICENSE_ADMIN_TOOLS) {
+                composable(Dest.ADMIN.route) {
+                    AdminTools.Screen()
+                }
             }
         }
     }

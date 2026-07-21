@@ -84,18 +84,24 @@ propia firma y fecha de vencimiento, y queda **atado a ese teléfono**.
    **Licencia** con el **ID de este teléfono** (un código corto, con botón
    para copiarlo).
 2. Te pasa ese ID (WhatsApp, lo que sea).
-3. Vos generás el código de activación en tu computadora:
+3. Generás el código de activación de alguna de las dos formas:
 
-   ```bash
-   # Demo de 1 día
-   python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --demo
+   - **Desde tu propio celular** (variante *Admin*, ver mas abajo): pestaña
+     **Admin** → pegás el ID del cliente → elegís Demo o Alquiler (y los
+     meses) → **Generar código**.
+   - **Desde tu computadora** (siempre disponible, no requiere instalar nada
+     en el teléfono):
 
-   # Alquiler (30 días por mes)
-   python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --rental-months 1
-   python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --rental-months 3
-   ```
+     ```bash
+     # Demo de 1 día
+     python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --demo
 
-4. Le mandás el código que imprime el script (algo como
+     # Alquiler (30 días por mes)
+     python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --rental-months 1
+     python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --rental-months 3
+     ```
+
+4. Le mandás el código que obtuviste (algo como
    `9P2KS-NAGSG-0HRDP-KRW2G`). Lo pega en el campo **Código de activación** y
    toca **Activar**.
 5. Mientras la licencia esté vigente, la app funciona normalmente. Al vencer,
@@ -117,6 +123,38 @@ propia firma y fecha de vencimiento, y queda **atado a ese teléfono**.
   válidos para cualquier teléfono. Si el código fuente de la app deja de ser
   privado, generá una clave nueva (ver comentario en `LicenseSecret.kt`) y
   recompilá.
+
+### Dos variantes de la app: `client` y `owner`
+
+El proyecto genera dos variantes ("product flavors") a partir del mismo
+código:
+
+- **`client`**: la que se distribuye (GitHub Releases / buscador de
+  actualizaciones). Solo puede **activar** códigos. Es la que compila el CI
+  en cada push a `main`.
+- **`owner`** ("AutoReply Admin"): para tu propio teléfono. Igual que
+  `client`, pero con una pestaña **Admin** extra para **generar** códigos
+  sin necesitar la computadora. No se publica en Releases; se instala solo
+  en tu celular.
+
+Para instalar la variante Admin en tu telefono (con el cable USB conectado
+y depuración USB activada):
+
+```bash
+./gradlew installOwnerDebug
+```
+
+O desde Android Studio: *Build Variants* (panel lateral) → elegí
+`ownerDebug` → **Run ▶**.
+
+> Nota de seguridad: como no hay servidor, la clave que firma los códigos
+> vive dentro del APK de **ambas** variantes (la app necesita poder
+> verificarla sin conexión). La variante `client` no tiene pantalla ni acceso
+> para generar códigos, pero alguien que decompile ese APK con suficiente
+> conocimiento técnico podría llegar a extraer la clave. Es una limitación
+> inherente a cualquier licencia 100% offline sin servidor; para cerrarla del
+> todo haría falta firma asimétrica con servidor de verificación, que es un
+> cambio mayor.
 
 ---
 

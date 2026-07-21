@@ -37,13 +37,13 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version detectada: $VERSION"
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Build debug APK (variante "client", la que se distribuye)
+        run: ./gradlew assembleClientDebug --no-daemon
 
       - name: Rename APK with version
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk \
+          cp app/build/outputs/apk/client/debug/app-client-debug.apk \
              out/AutoReply-v${{ steps.ver.outputs.version }}.apk
 
       - name: Upload APK as workflow artifact

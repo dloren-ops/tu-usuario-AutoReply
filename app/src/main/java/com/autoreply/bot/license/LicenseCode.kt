@@ -29,6 +29,26 @@ object LicenseCode {
         val plan: LicensePlan
     )
 
+    /**
+     * Genera un codigo formateado en grupos de 5 caracteres separados por guiones.
+     * Solo la variante "owner" de la app expone esto en la UI (ver [com.autoreply.bot.admin.AdminTools]);
+     * la variante "client" que reciben los inquilinos no navega a ninguna pantalla que la use.
+     */
+    fun generate(deviceHash: ByteArray, expiresEpochDay: Long, plan: LicensePlan): String {
+        require(deviceHash.size == 4) { "deviceHash debe tener 4 bytes" }
+        require(expiresEpochDay in 0..0xFFFF) { "expiresEpochDay fuera de rango (16 bits)" }
+
+        val payload = ByteArray(PAYLOAD_SIZE)
+        deviceHash.copyInto(payload, 0)
+        payload[4] = ((expiresEpochDay shr 8) and 0xFF).toByte()
+        payload[5] = (expiresEpochDay and 0xFF).toByte()
+        payload[6] = plan.wireValue.toByte()
+
+        val mac = hmac(payload).copyOf(MAC_SIZE)
+        val raw = Base32Crockford.encode(payload + mac)
+        return raw.chunked(5).joinToString("-")
+    }
+
     /** Verifica la firma y, si es valida, devuelve los datos codificados. Null si el codigo es invalido. */
     fun verifyAndParse(code: String): Parsed? {
         val bytes = Base32Crockford.decode(code) ?: return null

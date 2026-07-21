@@ -26,6 +26,25 @@ android {
         }
     }
 
+    // "client": la app que se distribuye a quienes alquilan AutoReply. Solo
+    // puede ACTIVAR codigos.
+    // "owner": variante de uso personal (no se distribuye) que ademas incluye
+    // la pantalla para GENERAR codigos de activacion. Instalala solo en tu
+    // propio telefono con `./gradlew installOwnerDebug`.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("client") {
+            dimension = "distribution"
+            buildConfigField("boolean", "LICENSE_ADMIN_TOOLS", "false")
+        }
+        create("owner") {
+            dimension = "distribution"
+            applicationIdSuffix = ".owner"
+            versionNameSuffix = "-owner"
+            buildConfigField("boolean", "LICENSE_ADMIN_TOOLS", "true")
+        }
+    }
+
     signingConfigs {
         // Llave de firma FIJA compartida por todas las versiones. Esto evita el
         // error "conflicto con un paquete existente" al actualizar, porque la
