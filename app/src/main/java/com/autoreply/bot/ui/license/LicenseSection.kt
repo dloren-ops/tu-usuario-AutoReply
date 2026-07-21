@@ -116,9 +116,10 @@ fun LicenseSection(
                     value = codeInput,
                     onValueChange = { codeInput = it.uppercase() },
                     label = { Text("Codigo de activacion") },
-                    placeholder = { Text("XXXXX-XXXXX-XXXXX-XXXXX") },
+                    placeholder = { Text("Pega aqui el codigo que te pasaron") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = false,
+                    maxLines = 4
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Button(

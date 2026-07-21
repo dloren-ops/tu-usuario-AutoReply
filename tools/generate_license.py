@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Generador OFFLINE de codigos de activacion para AutoReply.
+Generador OFFLINE de codigos de activacion para AutoReply (firma asimetrica
+ECDSA P-256). Requiere: pip install cryptography
 
 Uso tipico (el "ID de este telefono" te lo pasa quien alquila la app, se ve
 en la pantalla Inicio de la app, seccion "Licencia"):
@@ -10,24 +11,26 @@ en la pantalla Inicio de la app, seccion "Licencia"):
     python3 tools/generate_license.py --device-id 9774d56d682e549c --rental-months 3
 
 El codigo resultante se le pasa al usuario (por WhatsApp, SMS, etc.) para que
-lo escriba en la app. No requiere conexion a internet ni servidor: el codigo
-lleva su propia firma y fecha de vencimiento.
+lo escriba (o, mas realista, lo pegue) en la app. No requiere conexion a
+internet ni servidor: el codigo lleva su propia firma y fecha de vencimiento.
 
-IMPORTANTE: SECRET_HEX debe coincidir EXACTAMENTE con
-`LicenseSecret.HEX` en app/src/main/java/com/autoreply/bot/license/LicenseSecret.kt.
-Si cambias uno, cambia el otro y recompila la app. Guarda este script en un
-lugar privado: quien lo tenga puede generar codigos validos para cualquier
-telefono.
+Antes de usar este script hay que generar el par de claves UNA vez con
+`generate_keypair.py`. Ese script deja la clave privada en
+`owner_private_key.pem`, al lado de este archivo. Esa clave privada NUNCA
+debe subirse a git ni compartirse: quien la tenga puede generar codigos
+validos para cualquier telefono. La app (incluida la que reciben los
+clientes) solo lleva la clave PUBLICA (ver `LicensePublicKey.kt`), que sirve
+para verificar pero no para firmar.
 """
 
 import argparse
 import datetime
 import hashlib
-import hmac
+import pathlib
 import sys
 
-# Debe coincidir con LicenseSecret.HEX en la app.
-SECRET_HEX = "8430ee64d95fc201eec30053e36a007919ff236a16e4733c0c80d11351aad6b6"
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, utils
 
 CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
@@ -35,6 +38,8 @@ PLAN_DEMO = 0
 PLAN_RENTAL = 1
 
 EPOCH = datetime.date(1970, 1, 1)
+
+PRIVATE_KEY_PATH = pathlib.Path(__file__).parent / "owner_private_key.pem"
 
 
 def today_epoch_day() -> int:
@@ -66,7 +71,19 @@ def crockford_encode(data: bytes) -> str:
     return "".join(out)
 
 
-def build_code(device_id: str, expires_epoch_day: int, plan: int) -> str:
+def load_private_key() -> ec.EllipticCurvePrivateKey:
+    if not PRIVATE_KEY_PATH.exists():
+        sys.exit(
+            f"No encontre {PRIVATE_KEY_PATH}.\n"
+            "Corre primero: python3 tools/generate_keypair.py"
+        )
+    key = serialization.load_pem_private_key(PRIVATE_KEY_PATH.read_bytes(), password=None)
+    if not isinstance(key, ec.EllipticCurvePrivateKey):
+        sys.exit(f"{PRIVATE_KEY_PATH} no es una clave EC valida.")
+    return key
+
+
+def build_code(private_key: ec.EllipticCurvePrivateKey, device_id: str, expires_epoch_day: int, plan: int) -> str:
     if not (0 <= expires_epoch_day <= 0xFFFF):
         raise ValueError("expires_epoch_day fuera de rango (16 bits)")
 
@@ -74,11 +91,13 @@ def build_code(device_id: str, expires_epoch_day: int, plan: int) -> str:
     payload += device_hash(device_id)
     payload += expires_epoch_day.to_bytes(2, "big")
     payload.append(plan)
+    payload = bytes(payload)
 
-    secret = bytes.fromhex(SECRET_HEX)
-    mac = hmac.new(secret, bytes(payload), hashlib.sha256).digest()[:5]
+    der_signature = private_key.sign(payload, ec.ECDSA(hashes.SHA256()))
+    r, s = utils.decode_dss_signature(der_signature)
+    raw_signature = r.to_bytes(32, "big") + s.to_bytes(32, "big")
 
-    raw = crockford_encode(bytes(payload) + mac)
+    raw = crockford_encode(payload + raw_signature)
     groups = [raw[i:i + 5] for i in range(0, len(raw), 5)]
     return "-".join(groups)
 
@@ -114,8 +133,9 @@ def main() -> None:
         plan = PLAN_RENTAL
         days = args.days
 
+    private_key = load_private_key()
     expires_epoch_day = today_epoch_day() + days - 1  # el dia de hoy cuenta como dia 1
-    code = build_code(args.device_id, expires_epoch_day, plan)
+    code = build_code(private_key, args.device_id, expires_epoch_day, plan)
 
     print(f"Dispositivo:  {args.device_id}")
     print(f"Plan:         {'Demo' if plan == PLAN_DEMO else 'Alquiler'}")

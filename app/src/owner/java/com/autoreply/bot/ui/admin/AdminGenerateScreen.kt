@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.autoreply.bot.domain.model.LicensePlan
 import com.autoreply.bot.license.LicenseCode
 import com.autoreply.bot.license.LicenseManager
+import com.autoreply.bot.license.LicensePrivateKey
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -111,7 +112,7 @@ fun AdminGenerateScreen(modifier: Modifier = Modifier) {
                 val today = LicenseManager.todayEpochDay()
                 val expiresEpochDay = today + days - 1
                 val deviceHash = LicenseManager.deviceHash(deviceIdInput)
-                val code = LicenseCode.generate(deviceHash, expiresEpochDay, plan)
+                val code = LicenseCode.generate(deviceHash, expiresEpochDay, plan, LicensePrivateKey.bytes)
                 result = GeneratedCode(code, expiresEpochDay, days)
             },
             modifier = Modifier.fillMaxWidth()
@@ -134,7 +135,7 @@ fun AdminGenerateScreen(modifier: Modifier = Modifier) {
                     Text("Codigo generado", style = MaterialTheme.typography.titleMedium)
                     Text(
                         generated.code,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.bodyLarge,
                         fontFamily = FontFamily.Monospace
                     )
                     Text(

@@ -101,28 +101,53 @@ propia firma y fecha de vencimiento, y queda **atado a ese teléfono**.
      python3 tools/generate_license.py --device-id <ID_DEL_CLIENTE> --rental-months 3
      ```
 
-4. Le mandás el código que obtuviste (algo como
-   `9P2KS-NAGSG-0HRDP-KRW2G`). Lo pega en el campo **Código de activación** y
-   toca **Activar**.
+4. Le mandás el código que obtuviste (un texto largo separado por guiones).
+   Lo pega en el campo **Código de activación** y toca **Activar**.
 5. Mientras la licencia esté vigente, la app funciona normalmente. Al vencer,
    el interruptor maestro se bloquea y deja de responder hasta que cargue un
    código nuevo (podés vender una renovación así, sin tocar el teléfono).
 
+### Antes de la primera vez: generar tu par de claves
+
+El código se firma con **ECDSA (P-256)**: hay una clave **privada** (para
+firmar/generar códigos, solo la tenés vos) y una clave **pública** (para
+verificar, va dentro de la app). Se generan juntas, una única vez:
+
+```bash
+pip install cryptography   # una sola vez en tu computadora
+python3 tools/generate_keypair.py
+```
+
+Esto crea `tools/owner_private_key.pem` (la clave privada — **nunca la subas
+a git**, ya está en `.gitignore`) y te imprime dos valores en hexadecimal
+para pegar en el código fuente:
+
+- La clave **pública** → `app/src/main/java/com/autoreply/bot/license/LicensePublicKey.kt`
+  (constante `HEX`). Esta SI se puede compartir/subir, no sirve para firmar.
+- La clave **privada** → `app/src/owner/java/com/autoreply/bot/license/LicensePrivateKey.kt`
+  (constante `HEX`). Esta es la sensible: solo existe en la variante `owner`
+  (la tuya), nunca en la `client`.
+
+Después de pegarlas, recompilá ambas variantes. Este repo ya trae un par de
+claves de ejemplo puesto por default para que compile de entrada — **generá
+el tuyo propio** antes de repartir la app a un cliente real.
+
 ### Cómo funciona por dentro
 
 - El código codifica: un hash corto del ID del teléfono, la fecha de
-  vencimiento y el tipo de plan (demo/alquiler), firmados con HMAC-SHA256.
-- La app verifica la firma con la misma clave y revisa que el hash del
+  vencimiento y el tipo de plan (demo/alquiler), firmados con ECDSA usando
+  la clave **privada**.
+- La app verifica la firma con la clave **pública** y revisa que el hash del
   teléfono coincida y que no haya vencido — todo local, sin red.
 - Un código generado para un teléfono **no sirve en otro** (el hash no
   coincide) y no se puede alargar atrasando la fecha del sistema (la app
   recuerda el último día visto).
-- La clave secreta vive en `LicenseSecret.kt` (app) y en
-  `tools/generate_license.py` (tu computadora) — **deben coincidir**. Guardá
-  ese script en un lugar privado: quien lo tenga puede generar códigos
-  válidos para cualquier teléfono. Si el código fuente de la app deja de ser
-  privado, generá una clave nueva (ver comentario en `LicenseSecret.kt`) y
-  recompilá.
+- A diferencia de un secreto compartido (HMAC), la clave que viaja dentro
+  del APK — de **las dos** variantes, `client` y `owner` — es la **pública**:
+  sirve para comprobar un código, no para fabricar uno nuevo. Por eso el
+  código de activación quedó bastante más largo que antes (es una firma
+  digital completa, no se puede acortar como un HMAC), pero en la práctica
+  no importa porque siempre se copia y pega, nunca se tipea a mano.
 
 ### Dos variantes de la app: `client` y `owner`
 
@@ -147,14 +172,22 @@ y depuración USB activada):
 O desde Android Studio: *Build Variants* (panel lateral) → elegí
 `ownerDebug` → **Run ▶**.
 
-> Nota de seguridad: como no hay servidor, la clave que firma los códigos
-> vive dentro del APK de **ambas** variantes (la app necesita poder
-> verificarla sin conexión). La variante `client` no tiene pantalla ni acceso
-> para generar códigos, pero alguien que decompile ese APK con suficiente
-> conocimiento técnico podría llegar a extraer la clave. Es una limitación
-> inherente a cualquier licencia 100% offline sin servidor; para cerrarla del
-> todo haría falta firma asimétrica con servidor de verificación, que es un
-> cambio mayor.
+> Nota de seguridad: la variante `client` (la que reciben los inquilinos)
+> solo lleva la clave **pública** — ni con el APK decompilado en la mano se
+> pueden fabricar códigos nuevos, solo verificarlos. La clave **privada**
+> (la que sí firma) vive únicamente en `tools/owner_private_key.pem` (tu
+> computadora) y dentro de la variante `owner` (tu propio teléfono, nunca
+> distribuida). Si perdés o te roban el celular con la variante `owner`
+> instalada, rotá el par de claves (volvé a correr `generate_keypair.py`,
+> actualizá `LicensePublicKey.kt` y `LicensePrivateKey.kt`, y recompilá) para
+> invalidar la clave vieja.
+>
+> Lo que esto **no** evita: alguien con habilidad real de ingeniería inversa
+> siempre puede parchear su propia copia del APK para saltarse el chequeo de
+> licencia por completo (no la firma en sí, sino el "if no es válido,
+> bloquear" del código). Cerrar eso del todo requeriría verificación contra
+> un servidor tuyo + atestación (Play Integrity), que es un cambio de
+> arquitectura mucho más grande que esta app no tiene hoy.
 
 ---
 

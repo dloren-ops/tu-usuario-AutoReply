@@ -10,3 +10,8 @@
 .cxx
 *.apk
 *.aab
+
+# Clave privada de licencias (tools/generate_keypair.py). NUNCA subir a git:
+# quien la tenga puede generar codigos de activacion validos para cualquier
+# telefono.
+tools/owner_private_key.pem
