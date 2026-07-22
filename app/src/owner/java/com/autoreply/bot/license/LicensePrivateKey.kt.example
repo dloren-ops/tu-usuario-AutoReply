@@ -1,0 +1,23 @@
+package com.autoreply.bot.license
+
+/**
+ * PLANTILLA. Este archivo (con el sufijo `.example`) SI esta en git; el
+ * real (`LicensePrivateKey.kt`, sin `.example`) esta en `.gitignore` a
+ * proposito para que nadie lo suba a un repo publico por error.
+ *
+ * Como usarla:
+ *   1. Corre `python3 tools/generate_keypair.py` (una sola vez).
+ *   2. Copia este archivo como `LicensePrivateKey.kt` (mismo directorio,
+ *      sin `.example`).
+ *   3. Pega ahi el HEX de la clave PRIVADA que imprimio el script.
+ *
+ * Ver tambien: app/src/main/java/com/autoreply/bot/license/LicensePublicKey.kt
+ * (esa SI se sube a git, es publica).
+ */
+internal object LicensePrivateKey {
+    const val HEX = "PEGA_AQUI_TU_CLAVE_PRIVADA_HEX_GENERADA_CON_generate_keypair.py"
+
+    val bytes: ByteArray by lazy {
+        ByteArray(HEX.length / 2) { i -> HEX.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
+    }
+}

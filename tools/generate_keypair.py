@@ -59,7 +59,12 @@ def main() -> None:
     print("Pega esto en app/src/main/java/com/autoreply/bot/license/LicensePublicKey.kt (HEX, publica):")
     print(public_point_uncompressed.hex())
     print()
-    print("Pega esto en app/src/owner/java/com/autoreply/bot/license/LicensePrivateKey.kt (HEX, PRIVADA):")
+    print(
+        "Si todavia no existe, copia primero "
+        "app/src/owner/java/com/autoreply/bot/license/LicensePrivateKey.kt.example "
+        "como LicensePrivateKey.kt (sin .example) -- ese SI esta en .gitignore, nunca se sube a git."
+    )
+    print("Pega esto en LicensePrivateKey.kt (HEX, PRIVADA):")
     print(private_pkcs8_der.hex())
 
 

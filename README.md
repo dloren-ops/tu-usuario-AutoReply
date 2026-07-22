@@ -124,13 +124,16 @@ para pegar en el código fuente:
 
 - La clave **pública** → `app/src/main/java/com/autoreply/bot/license/LicensePublicKey.kt`
   (constante `HEX`). Esta SI se puede compartir/subir, no sirve para firmar.
+  Cambiarla y subirla a `main` es lo que hace que el APK `client` (el que
+  compila el CI) quede sincronizado con tu clave.
 - La clave **privada** → `app/src/owner/java/com/autoreply/bot/license/LicensePrivateKey.kt`
-  (constante `HEX`). Esta es la sensible: solo existe en la variante `owner`
-  (la tuya), nunca en la `client`.
+  (constante `HEX`). Este archivo **no existe** en un clon nuevo del repo:
+  copiá `LicensePrivateKey.kt.example` (que sí está en git, como plantilla)
+  a `LicensePrivateKey.kt` en la misma carpeta, y pegá ahí el hex. El archivo
+  sin `.example` está en `.gitignore` a propósito — así es imposible subirlo
+  por accidente con un `git add -A`.
 
-Después de pegarlas, recompilá ambas variantes. Este repo ya trae un par de
-claves de ejemplo puesto por default para que compile de entrada — **generá
-el tuyo propio** antes de repartir la app a un cliente real.
+Después de pegarlas, recompilá ambas variantes.
 
 ### Cómo funciona por dentro
 

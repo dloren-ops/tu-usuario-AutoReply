@@ -13,7 +13,7 @@ package com.autoreply.bot.license
  * a la vez, o los codigos viejos y nuevos dejaran de coincidir entre si.
  */
 internal object LicensePublicKey {
-    const val HEX = "04471f17383c6f90a7348fe0227a0a06af8e701c328f25912546c23ddc3d2c2fc912a475ece06cf9a1f39dd0314227861c68241541d36935b1fc70bc28396cb837"
+    const val HEX = "0420038973625aacb0e0de099b669efe051790bbbe9ac080716be35050c2d3ac885f4b51b3ea02938c72aa3108773bc48ce78f0426cfa8b92857d6813d569999b6"
 
     val bytes: ByteArray by lazy {
         ByteArray(HEX.length / 2) { i -> HEX.substring(i * 2, i * 2 + 2).toInt(16).toByte() }

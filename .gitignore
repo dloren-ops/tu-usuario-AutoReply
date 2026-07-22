@@ -13,5 +13,7 @@
 
 # Clave privada de licencias (tools/generate_keypair.py). NUNCA subir a git:
 # quien la tenga puede generar codigos de activacion validos para cualquier
-# telefono.
+# telefono. LicensePrivateKey.kt se crea copiando LicensePrivateKey.kt.example
+# (ese SI esta en git, como plantilla) y pegando ahi la clave real.
 tools/owner_private_key.pem
+app/src/owner/java/com/autoreply/bot/license/LicensePrivateKey.kt
